@@ -8,9 +8,15 @@ import (
 )
 
 type Config struct {
+	Docs     DocsConfig
 	Server   ServerConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
+}
+
+type DocsConfig struct {
+	Host   string
+	Schema string
 }
 
 type ServerConfig struct {
@@ -36,6 +42,10 @@ func Load() *Config {
 	_ = godotenv.Load() // Игнорируем ошибку, если .env нет
 
 	return &Config{
+		Docs: DocsConfig{
+			Host:   os.Getenv("SWAGGER_HOST"),
+			Schema: os.Getenv("SWAGGER_SCHEMES"),
+		},
 		Server: ServerConfig{
 			Port: getEnv("SERVER_PORT", "8080"),
 		},
