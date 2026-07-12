@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"garden-nook/docs"
 	"garden-nook/internal/config"
 	"garden-nook/internal/middleware"
 	"garden-nook/internal/migrator"
@@ -25,7 +26,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.0.2
+// @version         0.0.3
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -93,6 +94,9 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	docs.SwaggerInfo.Host = cfg.Docs.Host
+	docs.SwaggerInfo.Schemes = []string{cfg.Docs.Schema}
 
 	// Swagger UI
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
