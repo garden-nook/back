@@ -7,7 +7,7 @@ on:
     branches: [dev, stage]
 
 env:
-  REGISTRY_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/
+  REGISTRY_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
 
 jobs:
   build-dev:
