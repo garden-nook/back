@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"garden-nook/docs"
 	"garden-nook/internal/config"
 	"garden-nook/internal/middleware"
 	"garden-nook/internal/migrator"
@@ -25,7 +26,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.0.1
+// @version         0.0.3
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -79,7 +80,7 @@ func main() {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return
@@ -93,6 +94,9 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	docs.SwaggerInfo.Host = cfg.Docs.Host
+	docs.SwaggerInfo.Schemes = []string{cfg.Docs.Schema}
 
 	// Swagger UI
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
