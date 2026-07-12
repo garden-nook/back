@@ -25,7 +25,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.0.1
+// @version         0.0.2
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -79,7 +79,7 @@ func main() {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Headers", "*")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return
