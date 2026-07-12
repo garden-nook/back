@@ -1,8 +1,8 @@
-FROM golang:1.22-alpine AS tools
+FROM golang:1.26.5-alpine3.24 AS tools
 
 RUN go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26.5-alpine3.24 AS builder
 
 COPY --from=tools /go/bin/swag /usr/local/bin/swag
 
@@ -17,7 +17,7 @@ RUN swag init -g cmd/api/main.go --parseDependency --parseInternal
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/server ./cmd/api
 
-FROM alpine:3.19 AS runtime
+FROM alpine:3.24 AS runtime
 
 RUN apk add --no-cache ca-certificates tzdata wget \
     && addgroup -S appgroup \
