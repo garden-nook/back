@@ -2,111 +2,230 @@ package crops
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"garden-nook/internal/pkg/database"
 
 	"garden-nook/internal/pkg/apperrors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db     database.DBTX
+	mapper *database.ErrorMapper
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func NewRepository(pool *pgxpool.Pool, mapper *database.ErrorMapper) *Repository {
+	return &Repository{db: pool, mapper: mapper}
+}
+
+// WithTx возвращает новый экземпляр репозитория, привязанный к транзакции.
+func (r *Repository) WithTx(tx pgx.Tx) *Repository {
+	return &Repository{db: tx, mapper: r.mapper}
+}
+
+//  ---------- SOIL TYPES ----------
+
+func (r *Repository) ListSoilTypes(ctx context.Context, p *database.Pagination) ([]SoilType, int, error) {
+	base := `SELECT id, name, description FROM soil_types`
+	order := ` ORDER BY name`
+
+	if p == nil {
+		rows, err := r.db.Query(ctx, base+order)
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		defer rows.Close()
+		soilTypes, err := pgx.CollectRows(rows, pgx.RowToStructByName[SoilType])
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		return soilTypes, len(soilTypes), nil
+	}
+
+	batch := &pgx.Batch{}
+	batch.Queue(`SELECT COUNT(*) FROM soil_types`)
+
+	pagSQL, pagArgs := p.SQL(1)
+	batch.Queue(base+order+pagSQL, pagArgs...)
+
+	results := r.db.SendBatch(ctx, batch)
+	defer results.Close()
+
+	var total int
+	if err := results.QueryRow().Scan(&total); err != nil {
+		return nil, 0, r.mapper.Map(err)
+	}
+	rows, err := results.Query()
+	if err != nil {
+		return nil, 0, r.mapper.Map(err)
+	}
+	defer rows.Close()
+	soilTypes, err := pgx.CollectRows(rows, pgx.RowToStructByName[SoilType])
+	if err != nil {
+		return nil, 0, r.mapper.Map(err)
+	}
+	return soilTypes, total, nil
+}
+
+// GetSoilTypeByID возвращает тип почвы по ID.
+func (r *Repository) GetSoilTypeByID(ctx context.Context, id int32) (*SoilType, error) {
+	row, err := r.db.Query(ctx,
+		`SELECT id, name, description FROM soil_types WHERE id = $1`, id,
+	)
+	if err != nil {
+		return nil, r.mapper.Map(err)
+	}
+	soilType, err := pgx.CollectOneRow(row, pgx.RowToAddrOfStructByName[SoilType])
+	if err != nil {
+		return nil, r.mapper.Map(err)
+	}
+	return soilType, nil
+}
+
+// CreateSoilType создаёт новый тип почвы и возвращает его ID.
+func (r *Repository) CreateSoilType(ctx context.Context, req CreateSoilTypeRequest) (int32, error) {
+	var id int32
+	err := r.db.QueryRow(ctx,
+		`INSERT INTO soil_types (name, description) VALUES ($1, $2) RETURNING id`,
+		req.Name, req.Description,
+	).Scan(&id)
+	if err != nil {
+		return 0, r.mapper.Map(err)
+	}
+	return id, nil
+}
+
+// UpdateSoilType обновляет тип почвы и возвращает его ID.
+func (r *Repository) UpdateSoilType(ctx context.Context, id int32, req UpdateSoilTypeRequest) (int32, error) {
+	fields := []database.SetField{
+		{Name: "name", Value: req.Name},
+		{Name: "description", Value: req.Description},
+	}
+	setSQL, setArgs := database.BuildUpdateSet(1, fields...)
+	if len(setArgs) == 0 {
+		return id, nil
+	}
+	query := fmt.Sprintf(
+		"UPDATE soil_types SET %s WHERE id = $%d RETURNING id",
+		setSQL, len(setArgs)+1,
+	)
+	args := append(setArgs, id)
+
+	var updatedID int32
+	err := r.db.QueryRow(ctx, query, args...).Scan(&updatedID)
+	if err != nil {
+		return 0, r.mapper.Map(err)
+	}
+	return updatedID, nil
+}
+
+// DeleteSoilType удаляет тип почвы по ID.
+func (r *Repository) DeleteSoilType(ctx context.Context, id int32) error {
+	tag, err := r.db.Exec(ctx, `DELETE FROM soil_types WHERE id = $1`, id)
+	if err != nil {
+		return r.mapper.Map(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.ErrNotFound
+	}
+	return nil
 }
 
 // ---------- FAMILIES ----------
 
-func (r *Repository) ListFamilies(ctx context.Context) ([]CropFamily, error) {
-	query := `SELECT id, name, COALESCE(description,'') FROM crop_families ORDER BY name`
-	rows, err := r.db.Query(ctx, query)
+func (r *Repository) ListFamilies(ctx context.Context, p *database.Pagination) ([]CropFamily, int, error) {
+	base := `SELECT id, name, description FROM crop_families`
+	order := ` ORDER BY name`
+
+	if p == nil {
+		rows, err := r.db.Query(ctx, base+order)
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		defer rows.Close()
+		families, err := pgx.CollectRows(rows, pgx.RowToStructByName[CropFamily])
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		return families, len(families), nil
+	}
+
+	batch := &pgx.Batch{}
+	batch.Queue(`SELECT COUNT(*) FROM crop_families`)
+
+	pagSQL, pagArgs := p.SQL(1)
+	batch.Queue(base+order+pagSQL, pagArgs...)
+
+	results := r.db.SendBatch(ctx, batch)
+	defer results.Close()
+
+	var total int
+	if err := results.QueryRow().Scan(&total); err != nil {
+		return nil, 0, r.mapper.Map(err)
+	}
+	rows, err := results.Query()
 	if err != nil {
-		return nil, err
+		return nil, 0, r.mapper.Map(err)
 	}
 	defer rows.Close()
-
-	var out []CropFamily
-	for rows.Next() {
-		var f CropFamily
-		if err := rows.Scan(&f.ID, &f.Name, &f.Description); err != nil {
-			return nil, err
-		}
-		out = append(out, f)
+	families, err := pgx.CollectRows(rows, pgx.RowToStructByName[CropFamily])
+	if err != nil {
+		return nil, 0, r.mapper.Map(err)
 	}
-	return out, rows.Err()
+	return families, total, nil
 }
 
 func (r *Repository) GetFamilyByID(ctx context.Context, id int32) (*CropFamily, error) {
-	f := &CropFamily{}
-	err := r.db.QueryRow(ctx,
-		`SELECT id, name, COALESCE(description,'') FROM crop_families WHERE id=$1`, id,
-	).Scan(&f.ID, &f.Name, &f.Description)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, apperrors.ErrNotFound
-	}
+	row, err := r.db.Query(ctx, `SELECT id, name, description FROM crop_families WHERE id=$1`, id)
 	if err != nil {
-		return nil, err
+		return nil, r.mapper.Map(err)
 	}
-	return f, nil
+	family, err := pgx.CollectOneRow(row, pgx.RowToAddrOfStructByName[CropFamily])
+	if err != nil {
+		return nil, r.mapper.Map(err)
+	}
+	return family, nil
 }
 
-func (r *Repository) CreateFamily(ctx context.Context, req CreateFamilyRequest) (*CropFamily, error) {
-	f := &CropFamily{}
+func (r *Repository) CreateFamily(ctx context.Context, req CreateFamilyRequest) (int32, error) {
+	var id int32
 	err := r.db.QueryRow(ctx,
-		`INSERT INTO crop_families(name, description) VALUES ($1, $2) RETURNING id, name, COALESCE(description,'')`,
+		`INSERT INTO crop_families(name, description) VALUES ($1,$2) RETURNING id`,
 		req.Name, req.Description,
-	).Scan(&f.ID, &f.Name, &f.Description)
-
+	).Scan(&id)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
-			return nil, apperrors.ErrConflict
-		}
-		return nil, err
+		return 0, r.mapper.Map(err)
 	}
-	return f, nil
+	return id, nil
 }
 
-func (r *Repository) UpdateFamily(ctx context.Context, id int32, req UpdateFamilyRequest) (*CropFamily, error) {
-	existing, err := r.GetFamilyByID(ctx, id)
-	if err != nil {
-		return nil, err
+func (r *Repository) UpdateFamily(ctx context.Context, id int32, req UpdateFamilyRequest) (int32, error) {
+	fields := []database.SetField{
+		{Name: "name", Value: req.Name},
+		{Name: "description", Value: req.Description},
 	}
-	if req.Name != nil {
-		existing.Name = *req.Name
+	setSQL, setArgs := database.BuildUpdateSet(1, fields...)
+	if len(setArgs) == 0 {
+		return id, nil
 	}
-	if req.Description != nil {
-		existing.Description = *req.Description
-	}
+	query := fmt.Sprintf("UPDATE crop_families SET %s WHERE id=$%d RETURNING id",
+		setSQL, len(setArgs)+1)
+	args := append(setArgs, id)
 
-	_, err = r.db.Exec(ctx,
-		`UPDATE crop_families SET name=$1, description=$2 WHERE id=$3`,
-		existing.Name, existing.Description, id,
-	)
+	var updatedID int32
+	err := r.db.QueryRow(ctx, query, args...).Scan(&updatedID)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return nil, apperrors.ErrConflict
-		}
-		return nil, err
+		return 0, r.mapper.Map(err)
 	}
-	return existing, nil
+	return updatedID, nil
 }
 
 func (r *Repository) DeleteFamily(ctx context.Context, id int32) error {
-	// Физическое удаление семейства допустимо, если нет связанных crops.
-	// FK с ON DELETE RESTRICT в БД защитит нас.
 	tag, err := r.db.Exec(ctx, `DELETE FROM crop_families WHERE id=$1`, id)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" { // foreign_key_violation
-			return apperrors.ErrConflict
-		}
-		return err
+		return r.mapper.Map(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return apperrors.ErrNotFound
@@ -116,130 +235,137 @@ func (r *Repository) DeleteFamily(ctx context.Context, id int32) error {
 
 // ---------- CROPS ----------
 
-func (r *Repository) ListCrops(ctx context.Context, f ListCropsFilter) ([]Crop, int, error) {
-	if f.Limit <= 0 || f.Limit > 100 {
-		f.Limit = 50
-	}
-	if f.Page <= 0 {
-		f.Page = 1
-	}
-	offset := (f.Page - 1) * f.Limit
-
+func (r *Repository) ListCrops(ctx context.Context, f ListCropsFilter, p *database.Pagination) ([]Crop, int, error) {
 	where := `WHERE c.is_deleted = FALSE`
-	args := []interface{}{}
+	var filterArgs []any
 	argIdx := 1
 
 	if f.FamilyID != nil {
-		where += " AND c.family_id = $" + itoa(argIdx)
-		args = append(args, *f.FamilyID)
+		where += fmt.Sprintf(" AND c.family_id = $%d", argIdx)
+		filterArgs = append(filterArgs, *f.FamilyID)
+		argIdx++
+	}
+	if f.SoilTypeID != nil {
+		where += fmt.Sprintf(" AND c.soil_type_id = $%d", argIdx)
+		filterArgs = append(filterArgs, *f.SoilTypeID)
 		argIdx++
 	}
 	if f.Search != "" {
-		where += " AND LOWER(c.name) LIKE $" + itoa(argIdx)
-		args = append(args, "%"+f.Search+"%")
+		where += fmt.Sprintf(" AND LOWER(c.name) LIKE $%d", argIdx)
+		filterArgs = append(filterArgs, "%"+f.Search+"%")
 		argIdx++
 	}
 
-	var total int
-	countSQL := `SELECT COUNT(*) FROM crops c ` + where
-	if err := r.db.QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
-		return nil, 0, err
+	baseSelect := `SELECT c.id, c.name, c.description, c.family_id, cf.name as family_name,
+	               c.vegetation_days_avg, c.sun_needs, c.soil_type_id, st.name as soil_name
+	        FROM crops c
+	        JOIN crop_families cf ON cf.id = c.family_id
+	        JOIN soil_types st ON st.id = c.soil_type_id `
+
+	if p == nil {
+		rows, err := r.db.Query(ctx, baseSelect+where+` ORDER BY c.name ASC`)
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		defer rows.Close()
+		crops, err := pgx.CollectRows(rows, pgx.RowToStructByName[Crop])
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		return crops, len(crops), nil
 	}
 
-	dataSQL := `SELECT c.id, c.name, c.family_id, cf.name, c.vegetation_days_avg, c.sun_needs
-	            FROM crops c
-	            JOIN crop_families cf ON cf.id = c.family_id ` +
-		where + ` ORDER BY c.name ASC LIMIT $` + itoa(argIdx) + ` OFFSET $` + itoa(argIdx+1)
-	args = append(args, f.Limit, offset)
+	batch := &pgx.Batch{}
+	countSQL := `SELECT COUNT(*) FROM crops c ` + where
+	batch.Queue(countSQL, filterArgs...)
 
-	rows, err := r.db.Query(ctx, dataSQL, args...)
+	pagSQL, pagArgs := p.SQL(argIdx)
+	dataSQL := baseSelect + where + ` ORDER BY c.name ASC` + pagSQL
+	dataArgs := append(filterArgs, pagArgs...)
+	batch.Queue(dataSQL, dataArgs...)
+
+	results := r.db.SendBatch(ctx, batch)
+	defer results.Close()
+
+	var total int
+	if err := results.QueryRow().Scan(&total); err != nil {
+		return nil, 0, r.mapper.Map(err)
+	}
+	rows, err := results.Query()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, r.mapper.Map(err)
 	}
 	defer rows.Close()
-
-	var out []Crop
-	for rows.Next() {
-		var c Crop
-		if err := rows.Scan(&c.ID, &c.Name, &c.FamilyID, &c.FamilyName, &c.VegetationDaysAvg, &c.SunNeeds); err != nil {
-			return nil, 0, err
-		}
-		out = append(out, c)
+	crops, err := pgx.CollectRows(rows, pgx.RowToStructByName[Crop])
+	if err != nil {
+		return nil, 0, r.mapper.Map(err)
 	}
-	return out, total, rows.Err()
+	return crops, total, nil
 }
 
 func (r *Repository) GetCropByID(ctx context.Context, id int32) (*Crop, error) {
-	c := &Crop{}
-	err := r.db.QueryRow(ctx,
-		`SELECT c.id, c.name, c.family_id, cf.name, c.vegetation_days_avg, c.sun_needs
-		 FROM crops c JOIN crop_families cf ON cf.id = c.family_id
-		 WHERE c.id=$1 AND c.is_deleted=FALSE`, id,
-	).Scan(&c.ID, &c.Name, &c.FamilyID, &c.FamilyName, &c.VegetationDaysAvg, &c.SunNeeds)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, apperrors.ErrNotFound
-	}
-	return c, err
-}
-
-func (r *Repository) CreateCrop(ctx context.Context, req CreateCropRequest) (*Crop, error) {
-	c := &Crop{}
-	err := r.db.QueryRow(ctx,
-		`INSERT INTO crops(name, family_id, vegetation_days_avg, sun_needs)
-		 VALUES ($1,$2,$3,$4)
-		 RETURNING id, name, family_id, vegetation_days_avg, sun_needs`,
-		req.Name, req.FamilyID, req.VegetationDaysAvg, req.SunNeeds,
-	).Scan(&c.ID, &c.Name, &c.FamilyID, &c.VegetationDaysAvg, &c.SunNeeds)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" { // FK violation (family not exists)
-			return nil, apperrors.ErrBadRequest
-		}
-		return nil, err
-	}
-	// Подтягиваем имя семейства для ответа
-	fam, _ := r.GetFamilyByID(ctx, c.FamilyID)
-	if fam != nil {
-		c.FamilyName = fam.Name
-	}
-	return c, nil
-}
-
-func (r *Repository) UpdateCrop(ctx context.Context, id int32, req UpdateCropRequest) (*Crop, error) {
-	existing, err := r.GetCropByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if req.Name != nil {
-		existing.Name = *req.Name
-	}
-	if req.FamilyID != nil {
-		existing.FamilyID = *req.FamilyID
-	}
-	if req.VegetationDaysAvg != nil {
-		existing.VegetationDaysAvg = *req.VegetationDaysAvg
-	}
-	if req.SunNeeds != nil {
-		existing.SunNeeds = *req.SunNeeds
-	}
-
-	_, err = r.db.Exec(ctx,
-		`UPDATE crops SET name=$1, family_id=$2, vegetation_days_avg=$3, sun_needs=$4 WHERE id=$5`,
-		existing.Name, existing.FamilyID, existing.VegetationDaysAvg, existing.SunNeeds, id,
+	row, err := r.db.Query(ctx,
+		`SELECT c.id, c.name, c.description, c.family_id, cf.name as family_name, 
+			 c.vegetation_days_avg, c.sun_needs, c.soil_type_id, st.name as soil_name
+		 FROM crops c 
+		 JOIN crop_families cf ON cf.id = c.family_id
+	     JOIN soil_types st ON st.id = c.soil_type_id
+		 WHERE c.id=$1 AND c.is_deleted=FALSE`,
+		id,
 	)
 	if err != nil {
-		return nil, err
+		return nil, r.mapper.Map(err)
 	}
+	crop, err := pgx.CollectOneRow(row, pgx.RowToAddrOfStructByName[Crop])
+	if err != nil {
+		return nil, r.mapper.Map(err)
+	}
+	return crop, nil
+}
 
-	// Перегружаем с актуальным FamilyName
-	return r.GetCropByID(ctx, id)
+func (r *Repository) CreateCrop(ctx context.Context, req CreateCropRequest) (int32, error) {
+	var id int32
+	err := r.db.QueryRow(ctx,
+		`INSERT INTO crops(name, family_id, soil_type_id, vegetation_days_avg, sun_needs) 
+		 VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+		req.Name, req.FamilyID, req.SoilTypeID, req.VegetationDaysAvg, req.SunNeeds,
+	).Scan(&id)
+	if err != nil {
+		return 0, r.mapper.Map(err)
+	}
+	return id, nil
+}
+
+func (r *Repository) UpdateCrop(ctx context.Context, id int32, req UpdateCropRequest) (int32, error) {
+	fields := []database.SetField{
+		{Name: "name", Value: req.Name},
+		{Name: "family_id", Value: req.FamilyID},
+		{Name: "vegetation_days_avg", Value: req.VegetationDaysAvg},
+		{Name: "sun_needs", Value: req.SunNeeds},
+	}
+	setSQL, setArgs := database.BuildUpdateSet(1, fields...)
+	if len(setArgs) == 0 {
+		return id, nil
+	}
+	query := fmt.Sprintf(
+		"UPDATE crops SET %s WHERE id=$%d AND is_deleted=FALSE RETURNING id",
+		setSQL, len(setArgs)+1,
+	)
+	args := append(setArgs, id)
+
+	var updatedID int32
+	err := r.db.QueryRow(ctx, query, args...).Scan(&updatedID)
+	if err != nil {
+		return 0, r.mapper.Map(err)
+	}
+	return updatedID, nil
 }
 
 func (r *Repository) SoftDeleteCrop(ctx context.Context, id int32) error {
 	tag, err := r.db.Exec(ctx,
 		`UPDATE crops SET is_deleted = TRUE WHERE id=$1 AND is_deleted=FALSE`, id)
 	if err != nil {
-		return err
+		return r.mapper.Map(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return apperrors.ErrNotFound
@@ -249,55 +375,72 @@ func (r *Repository) SoftDeleteCrop(ctx context.Context, id int32) error {
 
 // ---------- RULES ----------
 
-func (r *Repository) ListRules(ctx context.Context) ([]CropRule, error) {
-	rows, err := r.db.Query(ctx,
-		`SELECT rule_id, subject_crop_id, subject_family_id, context_type,
+func (r *Repository) ListRules(ctx context.Context, p *database.Pagination) ([]CropRule, int, error) {
+	base := `SELECT rule_id, subject_crop_id, subject_family_id, context_type,
 		        context_crop_id, context_family_id, return_after_days,
 		        score_modifier, explanation, priority
-		 FROM crop_rules ORDER BY priority DESC, rule_id ASC`)
+		 FROM crop_rules`
+	order := ` ORDER BY priority DESC, rule_id ASC`
+
+	if p == nil {
+		rows, err := r.db.Query(ctx, base+order)
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		defer rows.Close()
+		rules, err := pgx.CollectRows(rows, pgx.RowToStructByName[CropRule])
+		if err != nil {
+			return nil, 0, r.mapper.Map(err)
+		}
+		return rules, len(rules), nil
+	}
+
+	batch := &pgx.Batch{}
+	batch.Queue(`SELECT COUNT(*) FROM crop_rules`)
+
+	pagSQL, pagArgs := p.SQL(1)
+	batch.Queue(base+order+pagSQL, pagArgs...)
+
+	results := r.db.SendBatch(ctx, batch)
+	defer results.Close()
+
+	var total int
+	if err := results.QueryRow().Scan(&total); err != nil {
+		return nil, 0, r.mapper.Map(err)
+	}
+	rows, err := results.Query()
 	if err != nil {
-		return nil, err
+		return nil, 0, r.mapper.Map(err)
 	}
 	defer rows.Close()
-
-	var out []CropRule
-	for rows.Next() {
-		var ru CropRule
-		if err := rows.Scan(&ru.ID, &ru.SubjectCropID, &ru.SubjectFamilyID, &ru.ContextType,
-			&ru.ContextCropID, &ru.ContextFamilyID, &ru.ReturnAfterDays,
-			&ru.ScoreModifier, &ru.Explanation, &ru.Priority); err != nil {
-			return nil, err
-		}
-		out = append(out, ru)
+	rules, err := pgx.CollectRows(rows, pgx.RowToStructByName[CropRule])
+	if err != nil {
+		return nil, 0, r.mapper.Map(err)
 	}
-	return out, rows.Err()
+	return rules, total, nil
 }
 
-func (r *Repository) CreateRule(ctx context.Context, req CreateRuleRequest) (*CropRule, error) {
-	ru := &CropRule{}
+func (r *Repository) CreateRule(ctx context.Context, req CreateRuleRequest) (int32, error) {
+	var id int32
 	err := r.db.QueryRow(ctx,
 		`INSERT INTO crop_rules
 		  (subject_crop_id, subject_family_id, context_type, context_crop_id, context_family_id,
 		   return_after_days, score_modifier, explanation, priority)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-		 RETURNING rule_id, subject_crop_id, subject_family_id, context_type,
-		           context_crop_id, context_family_id, return_after_days,
-		           score_modifier, explanation, priority`,
+		 RETURNING rule_id`,
 		req.SubjectCropID, req.SubjectFamilyID, req.ContextType, req.ContextCropID, req.ContextFamilyID,
 		req.ReturnAfterDays, req.ScoreModifier, req.Explanation, req.Priority,
-	).Scan(&ru.ID, &ru.SubjectCropID, &ru.SubjectFamilyID, &ru.ContextType,
-		&ru.ContextCropID, &ru.ContextFamilyID, &ru.ReturnAfterDays,
-		&ru.ScoreModifier, &ru.Explanation, &ru.Priority)
+	).Scan(&id)
 	if err != nil {
-		return nil, err
+		return 0, r.mapper.Map(err)
 	}
-	return ru, nil
+	return id, nil
 }
 
 func (r *Repository) DeleteRule(ctx context.Context, id int32) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM crop_rules WHERE rule_id=$1`, id)
 	if err != nil {
-		return err
+		return r.mapper.Map(err)
 	}
 	if tag.RowsAffected() == 0 {
 		return apperrors.ErrNotFound
@@ -305,7 +448,120 @@ func (r *Repository) DeleteRule(ctx context.Context, id int32) error {
 	return nil
 }
 
-// itoa — минихелпер, чтобы не тащить strconv ради одной операции.
-func itoa(i int) string {
-	return string(rune('0'+i%10)) + "" // упрощённо: только для i<10 достаточно
+// GetCropRelations возвращает все связи для культуры с заданным ID.
+func (r *Repository) GetCropRelations(ctx context.Context, cropID int32) (*CropRelations, error) {
+	// Получаем family_id культуры
+	var familyID int32
+	err := r.db.QueryRow(ctx, `SELECT family_id FROM crops WHERE id=$1`, cropID).Scan(&familyID)
+	if err != nil {
+		return nil, r.mapper.Map(err)
+	}
+
+	// Запрос, возвращающий все культуры, связанные с заданной через правила.
+	query := `
+		SELECT cr.context_type, cr.score_modifier,
+               cr.context_crop_id, c.name AS crop_name,
+               cr.context_family_id, cf.name AS family_name
+        FROM crop_rules cr
+        LEFT JOIN crops c ON cr.context_crop_id = c.id
+        LEFT JOIN crop_families cf ON cr.context_family_id = cf.id
+        WHERE (cr.subject_crop_id = $1 OR cr.subject_family_id = $2)
+          AND cr.context_type IN ($3, $4, $5)
+	`
+
+	rows, err := r.db.Query(ctx, query,
+		cropID, familyID,
+		RuleContextPredecessor, RuleContextSuccessor, RuleContextCompanion,
+	)
+	if err != nil {
+		return nil, r.mapper.Map(err)
+	}
+	defer rows.Close()
+
+	result := &CropRelations{}
+	for rows.Next() {
+		var (
+			contextType int32
+			score       int32
+			//explanation string
+			cropIDPtr   *int32
+			cropName    *string
+			familyIDPtr *int32
+			familyName  *string
+		)
+		if err = rows.Scan(&contextType, &score, /* &explanation,*/
+			&cropIDPtr, &cropName, &familyIDPtr, &familyName); err != nil {
+			return nil, r.mapper.Map(err)
+		}
+
+		switch {
+		case cropIDPtr != nil:
+			rel := CropRelation{
+				CropID:   *cropIDPtr,
+				CropName: *cropName,
+				Score:    score,
+				//Explanation: explanation,
+			}
+			appendCropRelation(result, contextType, rel)
+		case familyIDPtr != nil:
+			rel := FamilyRelation{
+				FamilyID:   *familyIDPtr,
+				FamilyName: *familyName,
+				Score:      score,
+				//Explanation: explanation,
+			}
+			appendFamilyRelation(result, contextType, rel)
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, r.mapper.Map(err)
+	}
+
+	return result, nil
+}
+
+func appendCropRelation(r *CropRelations, ctxType int32, rel CropRelation) {
+	switch ctxType {
+	case RuleContextPredecessor:
+		if rel.Score > 0 {
+			r.GoodPredecessors = append(r.GoodPredecessors, rel)
+		} else if rel.Score < 0 {
+			r.BadPredecessors = append(r.BadPredecessors, rel)
+		}
+	case RuleContextSuccessor:
+		if rel.Score > 0 {
+			r.GoodSuccessors = append(r.GoodSuccessors, rel)
+		} else if rel.Score < 0 {
+			r.BadSuccessors = append(r.BadSuccessors, rel)
+		}
+	case RuleContextCompanion:
+		if rel.Score > 0 {
+			r.GoodCompanions = append(r.GoodCompanions, rel)
+		} else if rel.Score < 0 {
+			r.BadCompanions = append(r.BadCompanions, rel)
+		}
+	}
+}
+
+func appendFamilyRelation(r *CropRelations, ctxType int32, rel FamilyRelation) {
+	switch ctxType {
+	case RuleContextPredecessor:
+		if rel.Score > 0 {
+			r.GoodPredecessorFamilies = append(r.GoodPredecessorFamilies, rel)
+		} else if rel.Score < 0 {
+			r.BadPredecessorFamilies = append(r.BadPredecessorFamilies, rel)
+		}
+	case RuleContextSuccessor:
+		if rel.Score > 0 {
+			r.GoodSuccessorFamilies = append(r.GoodSuccessorFamilies, rel)
+		} else if rel.Score < 0 {
+			r.BadSuccessorFamilies = append(r.BadSuccessorFamilies, rel)
+		}
+	case RuleContextCompanion:
+		if rel.Score > 0 {
+			r.GoodCompanionFamilies = append(r.GoodCompanionFamilies, rel)
+		} else if rel.Score < 0 {
+			r.BadCompanionFamilies = append(r.BadCompanionFamilies, rel)
+		}
+	}
 }

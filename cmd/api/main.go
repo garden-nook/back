@@ -9,6 +9,7 @@ import (
 	"garden-nook/internal/migrator"
 	"garden-nook/internal/modules/auth"
 	"garden-nook/internal/modules/crops"
+	"garden-nook/internal/modules/plot"
 	"garden-nook/internal/pkg/database"
 	"garden-nook/internal/pkg/jwt"
 	"log/slog"
@@ -26,7 +27,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.0.3
+// @version         0.0.5
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -57,15 +58,23 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWT.AccessSecret, cfg.JWT.UserAccessTTL, cfg.JWT.AdminAccessTTL)
 	authMW := middleware.NewAuth(jwtMgr)
 
+	errorMapper := database.NewErrorMapper(map[string]error{})
+
 	// Модуль auth
 	authRepo := auth.NewRepository(pool)
 	authSvc := auth.NewService(authRepo, jwtMgr, log)
 	authCtrl := auth.NewController(authSvc)
 
-	// Инициализация модуля crops
-	cropsRepo := crops.NewRepository(pool)
+	// Модуль crops
+	cropsRepo := crops.NewRepository(pool, errorMapper)
 	cropsSvc := crops.NewService(cropsRepo, log)
 	cropsCtrl := crops.NewController(cropsSvc)
+
+	// Модуль plots
+	plotsRepo := plots.NewRepository(pool, errorMapper)
+	//plotsProjector := plots.NewProjector(plotsRepo, log)
+	plotsSvc := plots.NewService(plotsRepo /*plotsProjector,*/, log)
+	plotsCtrl := plots.NewController(plotsSvc)
 
 	r := chi.NewRouter()
 
@@ -95,15 +104,15 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// Swagger UI
 	docs.SwaggerInfo.Host = cfg.Docs.Host
 	docs.SwaggerInfo.Schemes = []string{cfg.Docs.Schema}
-
-	// Swagger UI
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Регистрация модулей
 	auth.RegisterRoutes(r, authCtrl, authMW)
 	crops.RegisterRoutes(r, cropsCtrl, authMW)
+	plots.RegisterRoutes(r, plotsCtrl, authMW)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,

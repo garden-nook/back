@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
 	"garden-nook/internal/pkg/response"
+
 	"github.com/go-playground/validator/v10"
 )
 
@@ -40,7 +42,8 @@ func (e *ValidationError) Error() string { return e.Message }
 // WriteValidationError отвечает клиенту 400 с описанием.
 func WriteValidationError(w http.ResponseWriter, err error) {
 	msg := "validation failed"
-	if ve, ok := err.(*ValidationError); ok {
+	var ve *ValidationError
+	if errors.As(err, &ve) {
 		msg = ve.Message
 	}
 	response.Error(w, http.StatusBadRequest, msg)
