@@ -9,6 +9,7 @@ import (
 	"garden-nook/internal/migrator"
 	"garden-nook/internal/modules/auth"
 	"garden-nook/internal/modules/crops"
+	"garden-nook/internal/modules/plot"
 	"garden-nook/internal/pkg/database"
 	"garden-nook/internal/pkg/jwt"
 	"log/slog"
@@ -26,7 +27,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.0.4
+// @version         0.0.5
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -69,6 +70,12 @@ func main() {
 	cropsSvc := crops.NewService(cropsRepo, log)
 	cropsCtrl := crops.NewController(cropsSvc)
 
+	// Модуль plots
+	plotsRepo := plots.NewRepository(pool, errorMapper)
+	//plotsProjector := plots.NewProjector(plotsRepo, log)
+	plotsSvc := plots.NewService(plotsRepo /*plotsProjector,*/, log)
+	plotsCtrl := plots.NewController(plotsSvc)
+
 	r := chi.NewRouter()
 
 	// Базовые middleware
@@ -105,6 +112,7 @@ func main() {
 	// Регистрация модулей
 	auth.RegisterRoutes(r, authCtrl, authMW)
 	crops.RegisterRoutes(r, cropsCtrl, authMW)
+	plots.RegisterRoutes(r, plotsCtrl, authMW)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,

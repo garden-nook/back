@@ -66,7 +66,7 @@ func (c *Controller) GetSoilType(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     AdminAuth
 // @Param        body  body      CreateSoilTypeRequest  true  "Данные типа почвы"
-// @Success      201 {object} response.Response{data=CreateUpdateIntId}
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
@@ -94,7 +94,7 @@ func (c *Controller) CreateSoilType(w http.ResponseWriter, r *http.Request) {
 // @Security     AdminAuth
 // @Param        id    path      int                  	true  "ID типа почвы"
 // @Param        body  body      UpdateSoilTypeRequest  true  "Обновляемые поля"
-// @Success      200 {object} response.Response{data=CreateUpdateIntId}
+// @Success      200 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
@@ -194,7 +194,7 @@ func (c *Controller) GetFamily(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     AdminAuth
 // @Param        body  body      CreateFamilyRequest  true  "Данные семейства"
-// @Success      201 {object} response.Response{data=CreateUpdateIntId}
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
@@ -222,7 +222,7 @@ func (c *Controller) CreateFamily(w http.ResponseWriter, r *http.Request) {
 // @Security     AdminAuth
 // @Param        id    path      int                  true  "ID семейства"
 // @Param        body  body      UpdateFamilyRequest  true  "Обновляемые поля"
-// @Success      200 {object} response.Response{data=CreateUpdateIntId}
+// @Success      200 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
@@ -333,7 +333,7 @@ func (c *Controller) GetCrop(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     AdminAuth
 // @Param        body  body      CreateCropRequest  true  "Данные культуры"
-// @Success      201 {object} response.Response{data=CreateUpdateIntId}
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
@@ -360,7 +360,7 @@ func (c *Controller) CreateCrop(w http.ResponseWriter, r *http.Request) {
 // @Security     AdminAuth
 // @Param        id    path      int                 true  "ID культуры"
 // @Param        body  body      UpdateCropRequest   true  "Обновляемые поля"
-// @Success      200 {object} response.Response{data=CreateUpdateIntId}
+// @Success      200 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
@@ -437,7 +437,7 @@ func (c *Controller) ListRules(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     AdminAuth
 // @Param        body  body      CreateRuleRequest  true  "Правило"
-// @Success      201 {object} response.Response{data=CreateUpdateIntId}
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
