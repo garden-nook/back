@@ -26,7 +26,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.0.3
+// @version         0.0.4
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -57,13 +57,15 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWT.AccessSecret, cfg.JWT.UserAccessTTL, cfg.JWT.AdminAccessTTL)
 	authMW := middleware.NewAuth(jwtMgr)
 
+	errorMapper := database.NewErrorMapper(map[string]error{})
+
 	// Модуль auth
 	authRepo := auth.NewRepository(pool)
 	authSvc := auth.NewService(authRepo, jwtMgr, log)
 	authCtrl := auth.NewController(authSvc)
 
-	// Инициализация модуля crops
-	cropsRepo := crops.NewRepository(pool)
+	// Модуль crops
+	cropsRepo := crops.NewRepository(pool, errorMapper)
 	cropsSvc := crops.NewService(cropsRepo, log)
 	cropsCtrl := crops.NewController(cropsSvc)
 
@@ -95,10 +97,9 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// Swagger UI
 	docs.SwaggerInfo.Host = cfg.Docs.Host
 	docs.SwaggerInfo.Schemes = []string{cfg.Docs.Schema}
-
-	// Swagger UI
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Регистрация модулей

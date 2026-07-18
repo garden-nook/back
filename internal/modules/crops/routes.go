@@ -10,8 +10,12 @@ import (
 func RegisterRoutes(r chi.Router, ctrl *Controller, auth *middleware.AuthMiddleware) {
 	// ---- Публичные эндпоинты (только чтение справочников) ----
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/soil-types", ctrl.ListSoilTypes)
+		r.Get("/soil-types/{id}", ctrl.GetSoilType)
+
 		r.Get("/crop-families", ctrl.ListFamilies)
 		r.Get("/crop-families/{id}", ctrl.GetFamily)
+
 		r.Get("/crops", ctrl.ListCrops)
 		r.Get("/crops/{id}", ctrl.GetCrop)
 	})
@@ -20,6 +24,10 @@ func RegisterRoutes(r chi.Router, ctrl *Controller, auth *middleware.AuthMiddlew
 	r.Route("/api/v1/admin", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAdmin)
+
+			r.Post("/soil-types", ctrl.CreateSoilType)
+			r.Put("/soil-types/{id}", ctrl.UpdateSoilType)
+			r.Delete("/soil-types/{id}", ctrl.DeleteSoilType)
 
 			r.Post("/crop-families", ctrl.CreateFamily)
 			r.Put("/crop-families/{id}", ctrl.UpdateFamily)
