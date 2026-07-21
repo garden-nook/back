@@ -25,7 +25,6 @@ type Crop struct {
 	SunNeeds          SunNeeds `json:"sun_needs" db:"sun_needs"`
 	SoilTypeID        int32    `json:"soil_type_id" db:"soil_type_id"`
 	SoilName          *string  `json:"soil_name,omitempty" db:"soil_name"`
-	IsDeleted         bool     `json:"-" db:"is_deleted"`
 }
 
 // CropExtended — доменная модель культуры (содержит информацию о совместимости).

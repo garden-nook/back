@@ -1,4 +1,4 @@
-package plots
+package models
 
 import (
 	"time"
@@ -20,6 +20,16 @@ type Plot struct {
 type CreatePlotModel struct {
 	Name           string
 	SoilTypeID     int32
+	BoundaryWidth  float64
+	BoundaryHeight float64
+	AreaSqM        float64
+	GridCellSize   float64
+	GridCols       int
+	GridRows       int
+}
+
+// ResizePlotModel содержит параметры для изменения размеров участка.
+type ResizePlotModel struct {
 	BoundaryWidth  float64
 	BoundaryHeight float64
 	AreaSqM        float64

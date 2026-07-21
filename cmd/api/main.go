@@ -10,6 +10,8 @@ import (
 	"garden-nook/internal/modules/auth"
 	"garden-nook/internal/modules/crops"
 	"garden-nook/internal/modules/plot"
+	"garden-nook/internal/modules/plot/repositories"
+	"garden-nook/internal/modules/plot/services"
 	"garden-nook/internal/pkg/database"
 	"garden-nook/internal/pkg/jwt"
 	"log/slog"
@@ -27,7 +29,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.0.6
+// @version         0.0.7
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -58,7 +60,7 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWT.AccessSecret, cfg.JWT.UserAccessTTL, cfg.JWT.AdminAccessTTL)
 	authMW := middleware.NewAuth(jwtMgr)
 
-	errorMapper := database.NewErrorMapper(map[string]error{})
+	errorMapper := database.NewErrorMapper(map[string]error{}, log)
 
 	// Модуль auth
 	authRepo := auth.NewRepository(pool)
@@ -71,9 +73,9 @@ func main() {
 	cropsCtrl := crops.NewController(cropsSvc)
 
 	// Модуль plots
-	plotsRepo := plots.NewRepository(pool, errorMapper)
+	plotsRepo := repositories.NewRepository(pool, errorMapper)
 	//plotsProjector := plots.NewProjector(plotsRepo, log)
-	plotsSvc := plots.NewService(plotsRepo /*plotsProjector,*/, log)
+	plotsSvc := services.NewService(plotsRepo /*plotsProjector,*/, log)
 	plotsCtrl := plots.NewController(plotsSvc)
 
 	r := chi.NewRouter()
