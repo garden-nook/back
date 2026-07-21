@@ -23,7 +23,7 @@ func NewController(svc *Service) *Controller {
 // @Summary      Список участков пользователя
 // @Tags         plots
 // @Produce      json
-// @Security     BearerAuth
+// @Security     UserAuth
 // @Success      200 {object} response.Response{data=[]Plot}
 // @Router       /api/v1/plots [get]
 func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +41,7 @@ func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
 // @Tags         plots
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Security     UserAuth
 // @Param        body  body      CreatePlotRequest  true  "Данные участка"
 // @Success      201 {object} response.Response{data=response.CreateUpdateUuidId}
 // @Failure      400 {object} response.Response
@@ -70,7 +70,7 @@ func (c *Controller) CreatePlot(w http.ResponseWriter, r *http.Request) {
 // @Tags         plots
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Security     UserAuth
 // @Param        id    path      int                true  "ID участка"
 // @Param        body  body      UpdatePlotRequest  true  "Данные участка"
 // @Success      200 {object} response.Response{data=response.CreateUpdateUuidId}
@@ -100,7 +100,7 @@ func (c *Controller) UpdatePlot(w http.ResponseWriter, r *http.Request) {
 // @Summary      Удалить участок
 // @Tags         plots
 // @Produce      json
-// @Security     BearerAuth
+// @Security     UserAuth
 // @Param        id  path      string  true  "Plot ID"
 // @Success      204 "No Content"
 // @Router       /api/v1/plots/{id} [delete]
