@@ -11,6 +11,13 @@ type SetField struct {
 	Value any    // Значение (сам указатель, например *string)
 }
 
+func NewSetField[T any](name string, ptr *T) SetField {
+	if ptr == nil {
+		return SetField{Name: name}
+	}
+	return SetField{Name: name, Value: ptr}
+}
+
 // BuildUpdateSet собирает SQL‑выражение для SET‑части UPDATE и слайс значений.
 // Пропускает поля, где Value == nil или указатель на nil.
 func BuildUpdateSet(startIdx int, fields ...SetField) (setClause string, args []any) {

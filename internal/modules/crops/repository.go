@@ -100,8 +100,8 @@ func (r *Repository) CreateSoilType(ctx context.Context, req CreateSoilTypeReque
 // UpdateSoilType обновляет тип почвы и возвращает его ID.
 func (r *Repository) UpdateSoilType(ctx context.Context, id int32, req UpdateSoilTypeRequest) (int32, error) {
 	fields := []database.SetField{
-		{Name: "name", Value: req.Name},
-		{Name: "description", Value: req.Description},
+		database.NewSetField("name", req.Name),
+		database.NewSetField("description", req.Description),
 	}
 	setSQL, setArgs := database.BuildUpdateSet(1, fields...)
 	if len(setArgs) == 0 {
@@ -203,8 +203,8 @@ func (r *Repository) CreateFamily(ctx context.Context, req CreateFamilyRequest) 
 
 func (r *Repository) UpdateFamily(ctx context.Context, id int32, req UpdateFamilyRequest) (int32, error) {
 	fields := []database.SetField{
-		{Name: "name", Value: req.Name},
-		{Name: "description", Value: req.Description},
+		database.NewSetField("name", req.Name),
+		database.NewSetField("description", req.Description),
 	}
 	setSQL, setArgs := database.BuildUpdateSet(1, fields...)
 	if len(setArgs) == 0 {
@@ -338,10 +338,10 @@ func (r *Repository) CreateCrop(ctx context.Context, req CreateCropRequest) (int
 
 func (r *Repository) UpdateCrop(ctx context.Context, id int32, req UpdateCropRequest) (int32, error) {
 	fields := []database.SetField{
-		{Name: "name", Value: req.Name},
-		{Name: "family_id", Value: req.FamilyID},
-		{Name: "vegetation_days_avg", Value: req.VegetationDaysAvg},
-		{Name: "sun_needs", Value: req.SunNeeds},
+		database.NewSetField("name", req.Name),
+		database.NewSetField("family_id", req.FamilyID),
+		database.NewSetField("vegetation_days_avg", req.VegetationDaysAvg),
+		database.NewSetField("sun_needs", req.SunNeeds),
 	}
 	setSQL, setArgs := database.BuildUpdateSet(1, fields...)
 	if len(setArgs) == 0 {

@@ -2,6 +2,8 @@ package plots
 
 import (
 	"garden-nook/internal/middleware"
+	"garden-nook/internal/modules/plot/models"
+	"garden-nook/internal/modules/plot/services"
 	"garden-nook/internal/pkg/helpers"
 	"garden-nook/internal/pkg/response"
 	"net/http"
@@ -10,10 +12,10 @@ import (
 )
 
 type Controller struct {
-	svc *Service
+	svc *services.Service
 }
 
-func NewController(svc *Service) *Controller {
+func NewController(svc *services.Service) *Controller {
 	return &Controller{svc: svc}
 }
 
@@ -23,8 +25,8 @@ func NewController(svc *Service) *Controller {
 // @Summary      Список участков пользователя
 // @Tags         plots
 // @Produce      json
-// @Security     BearerAuth
-// @Success      200 {object} response.Response{data=[]Plot}
+// @Security     UserAuth
+// @Success      200 {object} response.Response{data=[]models.Plot}
 // @Router       /api/v1/plots [get]
 func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.SubID(r.Context())
@@ -41,8 +43,8 @@ func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
 // @Tags         plots
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
-// @Param        body  body      CreatePlotRequest  true  "Данные участка"
+// @Security     UserAuth
+// @Param        body  body      models.CreatePlotRequest  true  "Данные участка"
 // @Success      201 {object} response.Response{data=response.CreateUpdateUuidId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
@@ -50,7 +52,7 @@ func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/plots [post]
 func (c *Controller) CreatePlot(w http.ResponseWriter, r *http.Request) {
-	var req CreatePlotRequest
+	var req models.CreatePlotRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
@@ -70,9 +72,9 @@ func (c *Controller) CreatePlot(w http.ResponseWriter, r *http.Request) {
 // @Tags         plots
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
-// @Param        id    path      int                true  "ID участка"
-// @Param        body  body      UpdatePlotRequest  true  "Данные участка"
+// @Security     UserAuth
+// @Param        id    path      string                true  "ID участка"
+// @Param        body  body      models.UpdatePlotRequest  true  "Данные участка"
 // @Success      200 {object} response.Response{data=response.CreateUpdateUuidId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
@@ -80,7 +82,7 @@ func (c *Controller) CreatePlot(w http.ResponseWriter, r *http.Request) {
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/plots/{id} [put]
 func (c *Controller) UpdatePlot(w http.ResponseWriter, r *http.Request) {
-	var req UpdatePlotRequest
+	var req models.UpdatePlotRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
@@ -100,7 +102,7 @@ func (c *Controller) UpdatePlot(w http.ResponseWriter, r *http.Request) {
 // @Summary      Удалить участок
 // @Tags         plots
 // @Produce      json
-// @Security     BearerAuth
+// @Security     UserAuth
 // @Param        id  path      string  true  "Plot ID"
 // @Success      204 "No Content"
 // @Router       /api/v1/plots/{id} [delete]
