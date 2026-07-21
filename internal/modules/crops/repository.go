@@ -263,7 +263,7 @@ func (r *Repository) ListCrops(ctx context.Context, f ListCropsFilter, p *databa
 	        JOIN soil_types st ON st.id = c.soil_type_id `
 
 	if p == nil {
-		rows, err := r.db.Query(ctx, baseSelect+where+` ORDER BY c.name ASC`, filterArgs)
+		rows, err := r.db.Query(ctx, baseSelect+where+` ORDER BY c.name ASC`, filterArgs...)
 		if err != nil {
 			return nil, 0, r.mapper.Map(err)
 		}
