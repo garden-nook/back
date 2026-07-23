@@ -179,7 +179,7 @@ func (s *PlotService) UpdatePlot(ctx context.Context, plotID, ownerID string, re
 }
 
 func (s *PlotService) DeletePlot(ctx context.Context, plotID, ownerID string) error {
-	err := s.plotRepo.SoftDeletePlot(ctx, plotID, ownerID)
+	err := s.plotRepo.DeletePlot(ctx, plotID, ownerID)
 	if err != nil {
 		return s.seh.HandleError(err, "delete plot")
 	}

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"garden-nook/internal/modules/plot/dto"
 	"garden-nook/internal/modules/plot/enum"
+	"garden-nook/internal/modules/plot/model"
 	"garden-nook/internal/modules/plot/payload"
 	"garden-nook/internal/modules/plot/repository"
 	"garden-nook/internal/pkg/apperrors"
 	"garden-nook/internal/pkg/helpers"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,12 +19,13 @@ import (
 )
 
 type EventService struct {
-	pool       *pgxpool.Pool
-	plotRepo   *repository.PlotRepo
-	bedRepo    *repository.BedRepo
-	objectRepo *repository.ObjectRepo
-	eventRepo  *repository.EventStoreRepo
-	seh        *helpers.ServiceErrorHandler
+	pool        *pgxpool.Pool
+	plotRepo    *repository.PlotRepo
+	bedRepo     *repository.BedRepo
+	objectRepo  *repository.ObjectRepo
+	eventRepo   *repository.EventStoreRepo
+	historyRepo *repository.HistoryRepo
+	seh         *helpers.ServiceErrorHandler
 }
 
 func NewEventService(
@@ -31,15 +34,17 @@ func NewEventService(
 	bedRepo *repository.BedRepo,
 	objectRepo *repository.ObjectRepo,
 	eventRepo *repository.EventStoreRepo,
+	historyRepo *repository.HistoryRepo,
 	seh *helpers.ServiceErrorHandler,
 ) *EventService {
 	return &EventService{
-		pool:       pool,
-		plotRepo:   plotRepo,
-		bedRepo:    bedRepo,
-		objectRepo: objectRepo,
-		eventRepo:  eventRepo,
-		seh:        seh,
+		pool:        pool,
+		plotRepo:    plotRepo,
+		bedRepo:     bedRepo,
+		objectRepo:  objectRepo,
+		eventRepo:   eventRepo,
+		historyRepo: historyRepo,
+		seh:         seh,
 	}
 }
 
@@ -180,7 +185,92 @@ func (s *EventService) handleBedUpdated(ctx context.Context, plotID string, payl
 	if err := json.Unmarshal(payloadStr, &req); err != nil {
 		return apperrors.ErrBadRequest
 	}
-	return errors.New("not implemented")
+
+	bed, err := s.bedRepo.WithTx(tx).GetBedByID(ctx, req.BedID)
+	if err != nil {
+		return s.seh.HandleError(err, "get bed for update")
+	}
+	if bed.PlotID != plotID {
+		return apperrors.ErrNotFound
+	}
+
+	if (req.XStart != nil || req.YStart != nil || req.Width != nil || req.Height != nil) && bed.CurrentCropID != nil {
+		return apperrors.ErrConflict
+	}
+
+	newX := bed.XStart
+	newY := bed.YStart
+	newW := bed.Width
+	newH := bed.Height
+	newName := bed.Name
+	if req.XStart != nil {
+		newX = *req.XStart
+	}
+	if req.YStart != nil {
+		newY = *req.YStart
+	}
+	if req.Width != nil {
+		newW = *req.Width
+	}
+	if req.Height != nil {
+		newH = *req.Height
+	}
+	if req.Name != nil {
+		newName = *req.Name
+	}
+
+	plot, err := s.plotRepo.WithTx(tx).GetPlotByID(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get plot for bed update")
+	}
+	if newX < 0 || newY < 0 || newX+newW > plot.GridCols || newY+newH > plot.GridRows {
+		return apperrors.ErrBadRequest
+	}
+
+	beds, err := s.bedRepo.WithTx(tx).GetBedsByPlot(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get beds for overlap check")
+	}
+	for _, b := range beds {
+		if b.BedID == req.BedID {
+			continue
+		}
+		if rectanglesOverlap(newX, newY, newW, newH, b.XStart, b.YStart, b.Width, b.Height) {
+			return apperrors.ErrConflict
+		}
+	}
+
+	objects, err := s.objectRepo.WithTx(tx).GetObjectsByPlot(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get objects for overlap check")
+	}
+	for _, obj := range objects {
+		if rectanglesOverlap(newX, newY, newW, newH, obj.XStart, obj.YStart, obj.Width, obj.Height) {
+			return apperrors.ErrConflict
+		}
+	}
+
+	if err = s.bedRepo.WithTx(tx).UpdateBed(ctx, req.BedID, req.Name, req.XStart, req.YStart, req.Width, req.Height); err != nil {
+		return s.seh.HandleError(err, "update bed")
+	}
+
+	eventPayload := payload.BedUpdated{
+		BedID:  req.BedID,
+		Name:   newName,
+		XStart: newX,
+		YStart: newY,
+		Width:  newW,
+		Height: newH,
+	}
+	rawPayload, err := json.Marshal(eventPayload)
+	if err != nil {
+		return s.seh.HandleError(err, "marshal event")
+	}
+	if _, err = s.eventRepo.WithTx(tx).AppendEvent(ctx, plotID, enum.EventTypeBedUpdated, rawPayload); err != nil {
+		return s.seh.HandleError(err, "append event")
+	}
+
+	return nil
 }
 
 func (s *EventService) handleBedDeleted(ctx context.Context, plotID string, payloadStr json.RawMessage, tx pgx.Tx) error {
@@ -246,7 +336,42 @@ func (s *EventService) handleCropPlanted(ctx context.Context, plotID string, pay
 	if err := json.Unmarshal(payloadStr, &req); err != nil {
 		return apperrors.ErrBadRequest
 	}
-	return errors.New("not implemented")
+
+	bed, err := s.bedRepo.WithTx(tx).GetBedByID(ctx, req.BedID)
+	if err != nil {
+		return s.seh.HandleError(err, "get bed for planting")
+	}
+	if bed.PlotID != plotID {
+		return apperrors.ErrNotFound
+	}
+
+	plantDate := time.Now().UTC()
+	if req.PlantDate != nil && *req.PlantDate != "" {
+		parsed, err := time.Parse("2006-01-02", *req.PlantDate)
+		if err != nil {
+			return apperrors.ErrBadRequest
+		}
+		plantDate = parsed
+	}
+
+	if err = s.bedRepo.WithTx(tx).SetCrop(ctx, req.BedID, req.CropID, plantDate); err != nil {
+		return s.seh.HandleError(err, "set crop")
+	}
+
+	eventPayload := payload.CropPlanted{
+		BedID:     req.BedID,
+		CropID:    req.CropID,
+		PlantDate: plantDate.Format("2006-01-02"),
+	}
+	rawPayload, err := json.Marshal(eventPayload)
+	if err != nil {
+		return s.seh.HandleError(err, "marshal event")
+	}
+	if _, err = s.eventRepo.WithTx(tx).AppendEvent(ctx, plotID, enum.EventTypeCropPlanted, rawPayload); err != nil {
+		return s.seh.HandleError(err, "append event")
+	}
+
+	return nil
 }
 
 func (s *EventService) handleCropRemoved(ctx context.Context, plotID string, payloadStr json.RawMessage, tx pgx.Tx) error {
@@ -254,7 +379,70 @@ func (s *EventService) handleCropRemoved(ctx context.Context, plotID string, pay
 	if err := json.Unmarshal(payloadStr, &req); err != nil {
 		return apperrors.ErrBadRequest
 	}
-	return errors.New("not implemented")
+
+	bed, err := s.bedRepo.WithTx(tx).GetBedByID(ctx, req.BedID)
+	if err != nil {
+		return s.seh.HandleError(err, "get bed for crop removal")
+	}
+	if bed.PlotID != plotID {
+		return apperrors.ErrNotFound
+	}
+	if bed.CurrentCropID == nil {
+		return apperrors.ErrConflict
+	}
+	if bed.PlantDate == nil {
+		return apperrors.ErrInternal
+	}
+
+	harvestDate := time.Now().UTC()
+	if req.Date != nil && *req.Date != "" {
+		parsed, err := time.Parse("2006-01-02", *req.Date)
+		if err != nil {
+			return apperrors.ErrBadRequest
+		}
+		harvestDate = parsed
+	}
+
+	var cells []model.CellCoord
+	for x := bed.XStart; x < bed.XStart+bed.Width; x++ {
+		for y := bed.YStart; y < bed.YStart+bed.Height; y++ {
+			cells = append(cells, model.CellCoord{X: x, Y: y})
+		}
+	}
+
+	if req.Harvested {
+		var historyRecords []model.CellHistory
+		for _, cell := range cells {
+			historyRecords = append(historyRecords, model.CellHistory{
+				PlotID:      plotID,
+				XIndex:      cell.X,
+				YIndex:      cell.Y,
+				CropID:      *bed.CurrentCropID,
+				PlantDate:   *bed.PlantDate,
+				HarvestDate: harvestDate,
+			})
+		}
+		if err = s.historyRepo.WithTx(tx).AddHistoryRecords(ctx, historyRecords); err != nil {
+			return s.seh.HandleError(err, "insert history")
+		}
+	}
+
+	if err = s.bedRepo.WithTx(tx).ClearCrop(ctx, req.BedID); err != nil {
+		return s.seh.HandleError(err, "clear crop")
+	}
+
+	eventPayload := payload.CropRemoved{
+		BedID:     req.BedID,
+		CropID:    *bed.CurrentCropID,
+		Harvested: req.Harvested,
+		Date:      harvestDate.Format("2006-01-02"),
+	}
+	rawPayload, _ := json.Marshal(eventPayload)
+	if _, err = s.eventRepo.WithTx(tx).AppendEvent(ctx, plotID, enum.EventTypeCropRemoved, rawPayload); err != nil {
+		return s.seh.HandleError(err, "append event")
+	}
+
+	return nil
 }
 
 func (s *EventService) handleCellShadeUpdated(ctx context.Context, plotID string, payloadStr json.RawMessage, tx pgx.Tx) error {
