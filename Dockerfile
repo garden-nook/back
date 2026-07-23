@@ -13,7 +13,7 @@ RUN go mod download && go mod verify
 
 COPY . .
 
-RUN swag init -g cmd/api/main.go --parseDependency --parseInternal
+RUN swag init -g cmd/api/main.go --parseDependency --parseInternal --md ./docs/md -o ./docs/gen
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/server ./cmd/api
 

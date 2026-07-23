@@ -1,22 +1,6 @@
-package models
+package dto
 
 import "time"
-
-// ---------- PLOTS ----------
-
-// CreatePlotRequest – данные для создания участка.
-type CreatePlotRequest struct {
-	Name         string
-	SoilTypeID   int32
-	WidthMeters  float64 // Ширина в метрах
-	HeightMeters float64 // Высота в метрах
-}
-
-// UpdatePlotRequest – данные для обновления участка (только имя и тип почвы).
-type UpdatePlotRequest struct {
-	Name       *string
-	SoilTypeID *int32
-}
 
 // ---------- BEDS ----------
 

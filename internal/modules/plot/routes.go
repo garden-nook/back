@@ -17,8 +17,9 @@ func RegisterRoutes(r chi.Router, ctrl *Controller, auth *middleware.AuthMiddlew
 			r.Put("/{id}", ctrl.UpdatePlot)
 			r.Delete("/{id}", ctrl.DeletePlot)
 
-			// Состояние участка
-			//r.Get("/{id}/state", ctrl.GetPlotState)
+			// Конструктор участка
+			r.Get("/{id}/structure", ctrl.GetPlotStructure)
+			r.Post("/{id}/events", ctrl.HandleEvents)
 
 			// Грядки
 			//r.Post("/{plot_id}/beds", ctrl.CreateBed)
