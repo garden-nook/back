@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"garden-nook/internal/modules/plot/model"
 	"garden-nook/internal/pkg/apperrors"
 	"garden-nook/internal/pkg/database"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -42,6 +44,57 @@ func (r *BedRepo) CreateBedWithID(ctx context.Context, bedID, plotID, name strin
 		bedID, plotID, name, xStart, yStart, width, height)
 	if err != nil {
 		return r.mapper.Map(err)
+	}
+	return nil
+}
+
+func (r *BedRepo) UpdateBed(ctx context.Context, bedID string, name *string, xStart, yStart, width, height *int) error {
+	fields := []database.SetField{
+		database.NewSetField("name", name),
+		database.NewSetField("x_start", xStart),
+		database.NewSetField("y_start", yStart),
+		database.NewSetField("width", width),
+		database.NewSetField("height", height),
+	}
+	setSQL, setArgs := database.BuildUpdateSet(1, fields...)
+	if len(setArgs) == 0 {
+		return nil
+	}
+	query := fmt.Sprintf("UPDATE beds_ui SET %s WHERE bed_id=$%d", setSQL, len(setArgs)+1)
+	args := append(setArgs, bedID)
+
+	ct, err := r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return r.mapper.Map(err)
+	}
+	if ct.RowsAffected() == 0 {
+		return apperrors.ErrNotFound
+	}
+	return nil
+}
+
+func (r *BedRepo) SetCrop(ctx context.Context, bedID string, cropID int32, plantDate time.Time) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE beds_ui SET current_crop_id = $1, plant_date = $2 WHERE bed_id = $3 AND current_crop_id IS NULL`,
+		cropID, plantDate, bedID)
+	if err != nil {
+		return r.mapper.Map(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.ErrConflict
+	}
+	return nil
+}
+
+func (r *BedRepo) ClearCrop(ctx context.Context, bedID string) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE beds_ui SET current_crop_id = NULL, plant_date = NULL 
+         WHERE bed_id = $1 AND current_crop_id IS NOT NULL`, bedID)
+	if err != nil {
+		return r.mapper.Map(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.ErrNotFound
 	}
 	return nil
 }

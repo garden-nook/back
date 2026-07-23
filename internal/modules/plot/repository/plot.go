@@ -30,7 +30,7 @@ func (r *PlotRepo) ListPlots(ctx context.Context, ownerID string, p *database.Pa
 	              p.grid_cell_size, p.grid_cols, p.grid_rows
 	              FROM plots p
 	              JOIN soil_types st ON st.id = p.soil_type`
-	whereClause := "WHERE p.owner_id = $1 AND p.is_deleted = FALSE"
+	whereClause := "WHERE p.owner_id = $1"
 	whereArgs := []any{ownerID}
 	orderBy := "p.name"
 
@@ -70,7 +70,7 @@ func (r *PlotRepo) UpdatePlot(ctx context.Context, plotID, ownerID string, req d
 		return plotID, nil
 	}
 	query := fmt.Sprintf(
-		"UPDATE plots SET %s WHERE plot_id = $%d AND owner_id = $%d AND is_deleted = FALSE RETURNING plot_id",
+		"UPDATE plots SET %s WHERE plot_id = $%d AND owner_id = $%d RETURNING plot_id",
 		setSQL, len(setArgs)+1, len(setArgs)+2,
 	)
 	args := append(setArgs, plotID, ownerID)
@@ -83,14 +83,14 @@ func (r *PlotRepo) UpdatePlot(ctx context.Context, plotID, ownerID string, req d
 	return updatedID, nil
 }
 
-func (r *PlotRepo) SoftDeletePlot(ctx context.Context, plotID, ownerID string) error {
-	tag, err := r.db.Exec(ctx,
-		`UPDATE plots SET is_deleted = TRUE WHERE plot_id = $1 AND owner_id = $2 AND is_deleted = FALSE`,
+func (r *PlotRepo) DeletePlot(ctx context.Context, plotID, ownerID string) error {
+	ct, err := r.db.Exec(ctx,
+		`DELETE FROM plots WHERE plot_id = $1 AND owner_id = $2`,
 		plotID, ownerID)
 	if err != nil {
 		return r.mapper.Map(err)
 	}
-	if tag.RowsAffected() == 0 {
+	if ct.RowsAffected() == 0 {
 		return apperrors.ErrNotFound
 	}
 	return nil
@@ -101,7 +101,7 @@ func (r *PlotRepo) GetPlotByOwnerAndID(ctx context.Context, plotID, ownerID stri
                      p.grid_cell_size, p.grid_cols, p.grid_rows
               FROM plots p
               JOIN soil_types st ON st.id = p.soil_type
-              WHERE p.plot_id = $1 AND p.owner_id = $2 AND p.is_deleted = FALSE`
+              WHERE p.plot_id = $1 AND p.owner_id = $2`
 
 	row, err := r.db.Query(ctx, query, plotID, ownerID)
 	if err != nil {
@@ -121,7 +121,7 @@ func (r *PlotRepo) GetPlotByID(ctx context.Context, plotID string) (*model.Plot,
                      p.grid_cell_size, p.grid_cols, p.grid_rows
               FROM plots p
               JOIN soil_types st ON st.id = p.soil_type
-              WHERE p.plot_id = $1 AND p.is_deleted = FALSE`
+              WHERE p.plot_id = $1`
 
 	row, err := r.db.Query(ctx, query, plotID)
 	if err != nil {
