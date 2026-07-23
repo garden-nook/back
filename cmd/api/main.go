@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"errors"
-	"garden-nook/docs"
+	docs "garden-nook/docs/gen"
 	"garden-nook/internal/config"
 	"garden-nook/internal/middleware"
 	"garden-nook/internal/migrator"
 	"garden-nook/internal/modules/auth"
 	"garden-nook/internal/modules/crops"
 	"garden-nook/internal/modules/plot"
-	"garden-nook/internal/modules/plot/repositories"
-	"garden-nook/internal/modules/plot/services"
+	plotRepos "garden-nook/internal/modules/plot/repository"
+	plotSvcs "garden-nook/internal/modules/plot/service"
 	"garden-nook/internal/pkg/database"
+	"garden-nook/internal/pkg/helpers"
 	"garden-nook/internal/pkg/jwt"
 	"log/slog"
 	"net/http"
@@ -24,12 +25,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	httpSwagger "github.com/swaggo/http-swagger"
-
-	_ "garden-nook/docs"
 )
 
 // @title           Garden Nook API
-// @version         0.0.7
+// @version         0.1.0
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -61,6 +60,7 @@ func main() {
 	authMW := middleware.NewAuth(jwtMgr)
 
 	errorMapper := database.NewErrorMapper(map[string]error{}, log)
+	seh := helpers.NewServiceErrorHandler(log)
 
 	// Модуль auth
 	authRepo := auth.NewRepository(pool)
@@ -73,10 +73,14 @@ func main() {
 	cropsCtrl := crops.NewController(cropsSvc)
 
 	// Модуль plots
-	plotsRepo := repositories.NewRepository(pool, errorMapper)
-	//plotsProjector := plots.NewProjector(plotsRepo, log)
-	plotsSvc := services.NewService(plotsRepo /*plotsProjector,*/, log)
-	plotsCtrl := plots.NewController(plotsSvc)
+	plotRepo := plotRepos.NewPlotRepo(pool, errorMapper)
+	bedRepo := plotRepos.NewBedRepo(pool, errorMapper)
+	objectRepo := plotRepos.NewObjectRepo(pool, errorMapper)
+	gridRepo := plotRepos.NewGridCellRepo(pool, errorMapper)
+	eventRepo := plotRepos.NewEventStoreRepo(pool, errorMapper)
+	plotsSvc := plotSvcs.NewPlotService(pool, plotRepo, gridRepo, bedRepo, objectRepo, eventRepo, seh)
+	eventSvc := plotSvcs.NewEventService(pool, plotRepo, bedRepo, objectRepo, eventRepo, seh)
+	plotsCtrl := plots.NewController(plotsSvc, eventSvc)
 
 	r := chi.NewRouter()
 

@@ -1,5 +1,7 @@
 package crops
 
+import "garden-nook/internal/modules/plot/enum"
+
 // SoilType - доменная модель типа почвы
 type SoilType struct {
 	ID          int32   `json:"id" db:"id"`
@@ -16,15 +18,15 @@ type CropFamily struct {
 
 // Crop — доменная модель культуры.
 type Crop struct {
-	ID                int32    `json:"id" db:"id"`
-	Name              string   `json:"name" db:"name"`
-	Description       *string  `json:"description,omitempty" db:"description"`
-	FamilyID          int32    `json:"family_id" db:"family_id"`
-	FamilyName        *string  `json:"family_name,omitempty" db:"family_name"`
-	VegetationDaysAvg int32    `json:"vegetation_days_avg" db:"vegetation_days_avg"`
-	SunNeeds          SunNeeds `json:"sun_needs" db:"sun_needs"`
-	SoilTypeID        int32    `json:"soil_type_id" db:"soil_type_id"`
-	SoilName          *string  `json:"soil_name,omitempty" db:"soil_name"`
+	ID                int32           `json:"id" db:"id"`
+	Name              string          `json:"name" db:"name"`
+	Description       *string         `json:"description,omitempty" db:"description"`
+	FamilyID          int32           `json:"family_id" db:"family_id"`
+	FamilyName        *string         `json:"family_name,omitempty" db:"family_name"`
+	VegetationDaysAvg int32           `json:"vegetation_days_avg" db:"vegetation_days_avg"`
+	SunNeeds          enum.ShadeLevel `json:"sun_needs" db:"sun_needs"`
+	SoilTypeID        int32           `json:"soil_type_id" db:"soil_type_id"`
+	SoilName          *string         `json:"soil_name,omitempty" db:"soil_name"`
 }
 
 // CropExtended — доменная модель культуры (содержит информацию о совместимости).
@@ -80,16 +82,6 @@ type CropRelations struct {
 	BadCompanionFamilies    []FamilyRelation `json:"bad_companion_families"`
 }
 
-// SunNeeds Enum: 1=shade, 2=partial, 3=full
-type SunNeeds int32
-
-const (
-	SunNeedsShade   SunNeeds = 1
-	SunNeedsPartial SunNeeds = 2
-	SunNeedsFull    SunNeeds = 3
-)
-
-// ContextType Enum: 1=Predecessor, 2=Successor, 3=Companion
 type ContextType int32
 
 const (

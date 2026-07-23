@@ -2,8 +2,9 @@ package plots
 
 import (
 	"garden-nook/internal/middleware"
-	"garden-nook/internal/modules/plot/models"
-	"garden-nook/internal/modules/plot/services"
+	"garden-nook/internal/modules/plot/dto"
+	_ "garden-nook/internal/modules/plot/model"
+	"garden-nook/internal/modules/plot/service"
 	"garden-nook/internal/pkg/helpers"
 	"garden-nook/internal/pkg/response"
 	"net/http"
@@ -12,25 +13,24 @@ import (
 )
 
 type Controller struct {
-	svc *services.Service
+	plotSvc  *service.PlotService
+	eventSvc *service.EventService
 }
 
-func NewController(svc *services.Service) *Controller {
-	return &Controller{svc: svc}
+func NewController(plotSvc *service.PlotService, eventSvc *service.EventService) *Controller {
+	return &Controller{plotSvc: plotSvc, eventSvc: eventSvc}
 }
-
-// ---------- PLOTS ----------
 
 // ListPlots godoc
 // @Summary      Список участков пользователя
 // @Tags         plots
 // @Produce      json
 // @Security     UserAuth
-// @Success      200 {object} response.Response{data=[]models.Plot}
+// @Success      200 {object} response.Response{data=[]model.Plot}
 // @Router       /api/v1/plots [get]
 func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
 	ownerID := middleware.SubID(r.Context())
-	plots, _, err := c.svc.ListPlots(r.Context(), ownerID)
+	plots, _, err := c.plotSvc.ListPlots(r.Context(), ownerID, nil)
 	if err != nil {
 		helpers.WriteErr(w, err)
 		return
@@ -44,7 +44,7 @@ func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     UserAuth
-// @Param        body  body      models.CreatePlotRequest  true  "Данные участка"
+// @Param        body  body   dto.CreatePlotRequest  true  "Данные участка"
 // @Success      201 {object} response.Response{data=response.CreateUpdateUuidId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
@@ -52,14 +52,14 @@ func (c *Controller) ListPlots(w http.ResponseWriter, r *http.Request) {
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/plots [post]
 func (c *Controller) CreatePlot(w http.ResponseWriter, r *http.Request) {
-	var req models.CreatePlotRequest
+	var req dto.CreatePlotRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
 	}
 
 	ownerID := middleware.SubID(r.Context())
-	plot, err := c.svc.CreatePlot(r.Context(), ownerID, req)
+	plot, err := c.plotSvc.CreatePlot(r.Context(), ownerID, req)
 	if err != nil {
 		helpers.WriteErr(w, err)
 		return
@@ -74,7 +74,7 @@ func (c *Controller) CreatePlot(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     UserAuth
 // @Param        id    path      string                true  "ID участка"
-// @Param        body  body      models.UpdatePlotRequest  true  "Данные участка"
+// @Param        body  body      dto.UpdatePlotRequest  true  "Данные участка"
 // @Success      200 {object} response.Response{data=response.CreateUpdateUuidId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
@@ -82,7 +82,7 @@ func (c *Controller) CreatePlot(w http.ResponseWriter, r *http.Request) {
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/plots/{id} [put]
 func (c *Controller) UpdatePlot(w http.ResponseWriter, r *http.Request) {
-	var req models.UpdatePlotRequest
+	var req dto.UpdatePlotRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
@@ -90,7 +90,7 @@ func (c *Controller) UpdatePlot(w http.ResponseWriter, r *http.Request) {
 
 	plotID := chi.URLParam(r, "id")
 	ownerID := middleware.SubID(r.Context())
-	plot, err := c.svc.UpdatePlot(r.Context(), plotID, ownerID, req)
+	plot, err := c.plotSvc.UpdatePlot(r.Context(), plotID, ownerID, req)
 	if err != nil {
 		helpers.WriteErr(w, err)
 		return
@@ -110,68 +110,73 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 	plotID := chi.URLParam(r, "id")
 	ownerID := middleware.SubID(r.Context())
 
-	if err := c.svc.DeletePlot(r.Context(), plotID, ownerID); err != nil {
+	if err := c.plotSvc.DeletePlot(r.Context(), plotID, ownerID); err != nil {
 		helpers.WriteErr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-//// GetPlotState godoc
-//// @Summary      Получить полное состояние участка (грядки, объекты, сетка)
-//// @Tags         plots
-//// @Produce      json
-//// @Security     BearerAuth
-//// @Param        id  path      string  true  "Plot ID"
-//// @Success      200 {object} response.Response{data=PlotState}
-//// @Router       /api/v1/plots/{id}/state [get]
-//func (c *Controller) GetPlotState(w http.ResponseWriter, r *http.Request) {
-//	plotID := chi.URLParam(r, "id")
-//	ownerID := middleware.SubID(r.Context())
-//
-//	state, err := c.svc.GetPlotState(r.Context(), plotID, ownerID)
-//	if err != nil {
-//		helpers.WriteErr(w, err)
-//		return
-//	}
-//	response.JSON(w, http.StatusOK, state)
-//}
-//
-//// ---------- BEDS ----------
-//
-//// CreateBed godoc
-//// @Summary      Создать грядку
-//// @Tags         beds
-//// @Accept       json
-//// @Produce      json
-//// @Security     BearerAuth
-//// @Param        plot_id  path      string             true  "Plot ID"
-//// @Param        body     body      CreateBedRequest   true  "Данные грядки"
-//// @Success      201 {object} response.Response{data=Bed}
-//// @Router       /api/v1/plots/{plot_id}/beds [post]
-//func (c *Controller) CreateBed(w http.ResponseWriter, r *http.Request) {
-//	plotID := chi.URLParam(r, "plot_id")
-//	ownerID := middleware.SubID(r.Context())
-//
-//	var req CreateBedRequest
-//	if err := middleware.DecodeAndValidate(r, &req); err != nil {
-//		middleware.WriteValidationError(w, err)
-//		return
-//	}
-//
-//	bed, err := c.svc.CreateBed(r.Context(), plotID, ownerID, req)
-//	if err != nil {
-//		helpers.WriteErr(w, err)
-//		return
-//	}
-//	response.JSON(w, http.StatusCreated, bed)
-//}
+// GetPlotStructure godoc
+// @Summary      Получить информацию о участке и его структуре
+// @Tags         plots
+// @Produce      json
+// @Security     UserAuth
+// @Param        id  path      string  true  "Plot ID"
+// @Success      200 {object} response.Response{data=model.PlotStructure}
+// @Router       /api/v1/plots/{id}/structure [get]
+func (c *Controller) GetPlotStructure(w http.ResponseWriter, r *http.Request) {
+	plotID := chi.URLParam(r, "id")
+	ownerID := middleware.SubID(r.Context())
+
+	structure, err := c.plotSvc.GetPlotStructure(r.Context(), plotID, ownerID)
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, structure)
+}
+
+// HandleEvents godoc
+// @Summary      Отправить события действий над участком
+// @Description  В качестве payload могут выступать BedCreatedRequest, BedDeletedRequest
+// @Tags         plots
+// @Accept       json
+// @Produce      json
+// @Security     UserAuth
+// @Param        id    path      string           true  "Plot ID"
+// @Param        body  body      dto.PlotEvents   true  "События"
+// @Success      204 {object} dto.BedCreatedRequest
+// @Success      204 {object} dto.BedDeletedRequest
+// @Success      204 "No Content"
+// @Failure      400 {object} response.Response
+// @Failure      401 {object} response.Response
+// @Failure      403 {object} response.Response
+// @Failure      404 {object} response.Response
+// @Router       /api/v1/plots/{id}/events [post]
+func (c *Controller) HandleEvents(w http.ResponseWriter, r *http.Request) {
+	plotID := chi.URLParam(r, "id")
+	ownerID := middleware.SubID(r.Context())
+
+	var req dto.PlotEvents
+	if err := middleware.DecodeAndValidate(r, &req); err != nil {
+		middleware.WriteValidationError(w, err)
+		return
+	}
+
+	if err := c.eventSvc.HandleEvents(r.Context(), plotID, ownerID, req.Events); err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 //
 //// ListBeds godoc
 //// @Summary      Список грядок участка
 //// @Tags         beds
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string  true  "Plot ID"
 //// @Success      200 {object} response.Response{data=[]Bed}
 //// @Router       /api/v1/plots/{plot_id}/beds [get]
@@ -179,7 +184,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //	plotID := chi.URLParam(r, "plot_id")
 //	ownerID := middleware.SubID(r.Context())
 //
-//	beds, err := c.svc.ListBeds(r.Context(), plotID, ownerID)
+//	beds, err := c.plotSvc.ListBeds(r.Context(), plotID, ownerID)
 //	if err != nil {
 //		helpers.WriteErr(w, err)
 //		return
@@ -192,7 +197,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Tags         beds
 //// @Accept       json
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string             true  "Plot ID"
 //// @Param        bed_id   path      string             true  "Bed ID"
 //// @Param        body     body      UpdateBedRequest   true  "Обновления"
@@ -209,7 +214,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //		return
 //	}
 //
-//	bed, err := c.svc.UpdateBed(r.Context(), plotID, bedID, ownerID, req)
+//	bed, err := c.plotSvc.UpdateBed(r.Context(), plotID, bedID, ownerID, req)
 //	if err != nil {
 //		helpers.WriteErr(w, err)
 //		return
@@ -221,7 +226,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Summary      Удалить грядку
 //// @Tags         beds
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string  true  "Plot ID"
 //// @Param        bed_id   path      string  true  "Bed ID"
 //// @Success      204 "No Content"
@@ -231,7 +236,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //	bedID := chi.URLParam(r, "bed_id")
 //	ownerID := middleware.SubID(r.Context())
 //
-//	if err := c.svc.DeleteBed(r.Context(), plotID, bedID, ownerID); err != nil {
+//	if err := c.plotSvc.DeleteBed(r.Context(), plotID, bedID, ownerID); err != nil {
 //		helpers.WriteErr(w, err)
 //		return
 //	}
@@ -245,7 +250,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Tags         objects
 //// @Accept       json
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string               true  "Plot ID"
 //// @Param        body     body      CreateObjectRequest  true  "Данные объекта"
 //// @Success      201 {object} response.Response{data=UIObject}
@@ -260,7 +265,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //		return
 //	}
 //
-//	obj, err := c.svc.CreateObject(r.Context(), plotID, ownerID, req)
+//	obj, err := c.plotSvc.CreateObject(r.Context(), plotID, ownerID, req)
 //	if err != nil {
 //		helpers.WriteErr(w, err)
 //		return
@@ -272,7 +277,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Summary      Список объектов участка
 //// @Tags         objects
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string  true  "Plot ID"
 //// @Success      200 {object} response.Response{data=[]UIObject}
 //// @Router       /api/v1/plots/{plot_id}/objects [get]
@@ -280,7 +285,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //	plotID := chi.URLParam(r, "plot_id")
 //	ownerID := middleware.SubID(r.Context())
 //
-//	objects, err := c.svc.ListObjects(r.Context(), plotID, ownerID)
+//	objects, err := c.plotSvc.ListObjects(r.Context(), plotID, ownerID)
 //	if err != nil {
 //		helpers.WriteErr(w, err)
 //		return
@@ -292,7 +297,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Summary      Удалить объект
 //// @Tags         objects
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id    path      string  true  "Plot ID"
 //// @Param        object_id  path      string  true  "Object ID"
 //// @Success      204 "No Content"
@@ -302,7 +307,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //	objectID := chi.URLParam(r, "object_id")
 //	ownerID := middleware.SubID(r.Context())
 //
-//	if err := c.svc.DeleteObject(r.Context(), plotID, objectID, ownerID); err != nil {
+//	if err := c.plotSvc.DeleteObject(r.Context(), plotID, objectID, ownerID); err != nil {
 //		helpers.WriteErr(w, err)
 //		return
 //	}
@@ -316,7 +321,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Tags         plantings
 //// @Accept       json
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string              true  "Plot ID"
 //// @Param        body     body      PlantCropRequest    true  "Данные посадки"
 //// @Success      200 {object} response.Response{data=string}
@@ -331,7 +336,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //		return
 //	}
 //
-//	if err := c.svc.PlantCrop(r.Context(), plotID, ownerID, req); err != nil {
+//	if err := c.plotSvc.PlantCrop(r.Context(), plotID, ownerID, req); err != nil {
 //		helpers.WriteErr(w, err)
 //		return
 //	}
@@ -343,7 +348,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Tags         plantings
 //// @Accept       json
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string               true  "Plot ID"
 //// @Param        body     body      HarvestCropRequest   true  "Данные сбора"
 //// @Success      200 {object} response.Response{data=string}
@@ -358,7 +363,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //		return
 //	}
 //
-//	if err := c.svc.HarvestCrop(r.Context(), plotID, ownerID, req); err != nil {
+//	if err := c.plotSvc.HarvestCrop(r.Context(), plotID, ownerID, req); err != nil {
 //		helpers.WriteErr(w, err)
 //		return
 //	}
@@ -371,7 +376,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //// @Summary      Получить историю изменений участка
 //// @Tags         timeline
 //// @Produce      json
-//// @Security     BearerAuth
+//// @Security     UserAuth
 //// @Param        plot_id  path      string  true   "Plot ID"
 //// @Param        from     query     string  false  "Начальная дата (YYYY-MM-DD)"
 //// @Param        to       query     string  false  "Конечная дата (YYYY-MM-DD)"
@@ -401,7 +406,7 @@ func (c *Controller) DeletePlot(w http.ResponseWriter, r *http.Request) {
 //		}
 //	}
 //
-//	events, err := c.svc.GetTimeline(r.Context(), plotID, ownerID, filter)
+//	events, err := c.plotSvc.GetTimeline(r.Context(), plotID, ownerID, filter)
 //	if err != nil {
 //		helpers.WriteErr(w, err)
 //		return

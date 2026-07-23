@@ -3,6 +3,7 @@ package middleware
 import (
 	"encoding/json"
 	"errors"
+	"garden-nook/internal/pkg/apperrors"
 	"net/http"
 	"strings"
 
@@ -28,6 +29,10 @@ func DecodeAndValidate(r *http.Request, dst interface{}) error {
 	}
 
 	if err := validate.Struct(dst); err != nil {
+		var invalidValidationError *validator.InvalidValidationError
+		if errors.As(err, &invalidValidationError) {
+			return apperrors.ErrBadRequest
+		}
 		return &ValidationError{Message: formatValidationErrors(err)}
 	}
 	return nil

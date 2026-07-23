@@ -2,10 +2,9 @@ package database
 
 import (
 	"errors"
-	"fmt"
 	"garden-nook/internal/pkg/apperrors"
+	"garden-nook/internal/pkg/helpers"
 	"log/slog"
-	"runtime"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -40,15 +39,6 @@ func (m *ErrorMapper) Map(err error) error {
 			return mapped
 		}
 	}
-	m.log.Error("DB error handled", "err", err, "source", formatSource())
+	m.log.Error("DB error", slog.Any("err", err), slog.String("source", helpers.GetLogSource()))
 	return err
-}
-
-func formatSource() string {
-	pc, file, line, ok := runtime.Caller(2)
-	if ok {
-		funcName := runtime.FuncForPC(pc).Name()
-		return fmt.Sprintf("%s (%s:%d)", funcName, file, line)
-	}
-	return "undefined"
 }
