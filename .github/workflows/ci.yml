@@ -99,7 +99,7 @@ jobs:
             set -e
             cd /opt/garden-nook/docker/dev
             docker compose pull
-            IMAGE_TAG=dev-${{ github.sha }} docker compose up -d --remove-orphans
+            BACK_IMAGE_TAG=dev-${{ github.sha }} docker compose up -d --remove-orphans
             docker image prune -f
             echo "Deployed dev-${{ github.sha }}"
 
@@ -120,6 +120,6 @@ jobs:
             set -e
             cd /opt/garden-nook/docker/stage
             docker compose pull
-            IMAGE_TAG=stage-${{ github.sha }} docker compose up -d --remove-orphans
+            BACK_IMAGE_TAG=stage-${{ github.sha }} docker compose up -d --remove-orphans
             docker image prune -f
             echo "Deployed stage-${{ github.sha }}"

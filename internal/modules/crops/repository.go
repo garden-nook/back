@@ -251,7 +251,7 @@ func (r *Repository) ListCrops(ctx context.Context, f ListCropsFilter, p *databa
 		argIdx++
 	}
 	if f.Search != "" {
-		where += fmt.Sprintf(" AND LOWER(c.name) LIKE $%d", argIdx)
+		where += fmt.Sprintf(" AND c.name ILIKE $%d", argIdx)
 		filterArgs = append(filterArgs, "%"+f.Search+"%")
 		argIdx++
 	}
