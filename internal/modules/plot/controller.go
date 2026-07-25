@@ -8,17 +8,27 @@ import (
 	"garden-nook/internal/pkg/helpers"
 	"garden-nook/internal/pkg/response"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type Controller struct {
-	plotSvc  *service.PlotService
-	eventSvc *service.EventService
+	plotSvc           *service.PlotService
+	eventSvc          *service.EventService
+	recommendationSvc *service.RecommendationService
 }
 
-func NewController(plotSvc *service.PlotService, eventSvc *service.EventService) *Controller {
-	return &Controller{plotSvc: plotSvc, eventSvc: eventSvc}
+func NewController(
+	plotSvc *service.PlotService,
+	eventSvc *service.EventService,
+	recommendationSvc *service.RecommendationService,
+) *Controller {
+	return &Controller{
+		plotSvc:           plotSvc,
+		eventSvc:          eventSvc,
+		recommendationSvc: recommendationSvc,
+	}
 }
 
 // ListPlots godoc
@@ -172,6 +182,51 @@ func (c *Controller) HandleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetBedRecommendations godoc
+// @Summary      Получить рекомендации для посадки
+// @Tags         plots
+// @Produce      json
+// @Security     UserAuth
+// @Param        id  path      string  true  "Bed ID"
+// @Param        search   		query     string  false  "Поиск по названию"
+// @Param        limit    		query     int     false  "Максимум рекомендаций (default 10)"
+// @Param        searchLimit    query     int     false  "Максимум культур при поиске (default 10)"
+// @Param        disableFilters query     string  false  "Использовать ли фильтры по почве и освещённости для глобального поиска (default false)"
+// @Success      200 {object} response.Response{data=dto.BedRecommendationsResponse}
+// @Router       /api/v1/plots/bed/{id}/recommendation [get]
+func (c *Controller) GetBedRecommendations(w http.ResponseWriter, r *http.Request) {
+	bedID := chi.URLParam(r, "id")
+	ownerID := middleware.SubID(r.Context())
+
+	q := r.URL.Query()
+
+	search := q.Get("search")
+
+	limit := 10
+	if limitStr := q.Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	searchLimit := 10
+	if limitStr := q.Get("searchLimit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			searchLimit = l
+		}
+	}
+	disableFilters := false
+	if disableFiltersStr := q.Get("disableFilters"); disableFiltersStr == "true" {
+		disableFilters = true
+	}
+
+	recommendations, err := c.recommendationSvc.GetBedRecommendations(r.Context(), bedID, ownerID, search, limit, searchLimit, disableFilters)
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, recommendations)
 }
 
 //// ---------- TIMELINE ----------
