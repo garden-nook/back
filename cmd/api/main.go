@@ -9,6 +9,8 @@ import (
 	"garden-nook/internal/migrator"
 	"garden-nook/internal/modules/auth"
 	"garden-nook/internal/modules/crops"
+	cropRepos "garden-nook/internal/modules/crops/repository"
+	cropSvcs "garden-nook/internal/modules/crops/service"
 	"garden-nook/internal/modules/plot"
 	plotRepos "garden-nook/internal/modules/plot/repository"
 	plotSvcs "garden-nook/internal/modules/plot/service"
@@ -28,7 +30,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.1.1
+// @version         0.2.0
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -68,9 +70,20 @@ func main() {
 	authCtrl := auth.NewController(authSvc)
 
 	// Модуль crops
-	cropsRepo := crops.NewRepository(pool, errorMapper)
-	cropsSvc := crops.NewService(cropsRepo, log)
-	cropsCtrl := crops.NewController(cropsSvc)
+	soilTypeRepo := cropRepos.NewSoilTypeRepo(pool, errorMapper)
+	cropFamilyRepo := cropRepos.NewCropFamilyRepo(pool, errorMapper)
+	cropRepo := cropRepos.NewCropRepo(pool, errorMapper)
+	cropRuleRepo := cropRepos.NewCropRuleRepo(pool, errorMapper)
+	ruleCache, err := cropSvcs.NewRuleCache(cropRuleRepo)
+	if err != nil {
+		log.Error("crop rule cache refresh failed", "err", err)
+		os.Exit(1)
+	}
+	soilTypeSvc := cropSvcs.NewSoilTypeService(soilTypeRepo, seh)
+	cropFamilySvc := cropSvcs.NewCropFamilyService(cropFamilyRepo, seh)
+	cropSvc := cropSvcs.NewCropService(cropRepo, cropFamilyRepo, cropRuleRepo, seh)
+	cropRuleSvc := cropSvcs.NewCropRuleService(cropRuleRepo, ruleCache, seh)
+	cropsCtrl := crops.NewController(soilTypeSvc, cropFamilySvc, cropSvc, cropRuleSvc)
 
 	// Модуль plots
 	plotRepo := plotRepos.NewPlotRepo(pool, errorMapper)
@@ -81,7 +94,8 @@ func main() {
 	historyRepo := plotRepos.NewHistoryRepo(pool, errorMapper)
 	plotsSvc := plotSvcs.NewPlotService(pool, plotRepo, gridRepo, bedRepo, objectRepo, eventRepo, seh)
 	eventSvc := plotSvcs.NewEventService(pool, plotRepo, bedRepo, objectRepo, eventRepo, historyRepo, seh)
-	plotsCtrl := plots.NewController(plotsSvc, eventSvc)
+	recommendationSvc := plotSvcs.NewRecommendationService(bedRepo, plotRepo, gridRepo, historyRepo, cropSvc, ruleCache, seh)
+	plotsCtrl := plots.NewController(plotsSvc, eventSvc, recommendationSvc)
 
 	r := chi.NewRouter()
 

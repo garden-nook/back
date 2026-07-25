@@ -21,6 +21,8 @@ func RegisterRoutes(r chi.Router, ctrl *Controller, auth *middleware.AuthMiddlew
 			r.Get("/{id}/structure", ctrl.GetPlotStructure)
 			r.Post("/{id}/events", ctrl.HandleEvents)
 
+			r.Get("/bed/{id}/recommendation", ctrl.GetBedRecommendations)
+
 			// Timeline
 			//r.Get("/{plot_id}/timeline", ctrl.GetTimeline)
 		})

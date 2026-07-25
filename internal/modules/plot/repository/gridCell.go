@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"garden-nook/internal/modules/plot/enum"
 	"garden-nook/internal/modules/plot/model"
 	"garden-nook/internal/pkg/database"
@@ -52,4 +53,23 @@ func (r *GridCellRepo) GetShadedCells(ctx context.Context, plotID string) ([]mod
 	}
 	defer rows.Close()
 	return pgx.CollectRows(rows, pgx.RowToStructByName[model.GridCell])
+}
+
+func (r *GridCellRepo) GetAverageShadeForRectangle(ctx context.Context, plotID string, xStart, yStart, width, height int) (float64, error) {
+	var avg sql.NullFloat64
+	err := r.db.QueryRow(ctx, `
+        SELECT AVG(shade_level::float)
+        FROM grid_cells
+        WHERE plot_id = $1
+          AND x_index >= $2 AND x_index < $2 + $4
+          AND y_index >= $3 AND y_index < $3 + $5
+    `, plotID, xStart, yStart, width, height).Scan(&avg)
+	if err != nil {
+		return 0, r.mapper.Map(err)
+	}
+	if !avg.Valid {
+		// Если по какой-то причине ячеек нет, возвращаем значение по умолчанию (полное солнце)
+		return float64(enum.ShadeLevelFull), nil
+	}
+	return avg.Float64, nil
 }
