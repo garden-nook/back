@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"garden-nook/internal/modules/plot/dto"
 	"garden-nook/internal/modules/plot/model"
 	"garden-nook/internal/pkg/database"
 
@@ -65,4 +66,36 @@ func (r *HistoryRepo) GetPredecessorsForBed(ctx context.Context, plotID string, 
 		predecessors = append(predecessors, p)
 	}
 	return predecessors, rows.Err()
+}
+
+func (r *HistoryRepo) GetCropHistoryForBed(ctx context.Context, plotID string, xStart, yStart, width, height int) ([]dto.BedCropHistoryEntry, error) {
+	query := `
+        SELECT h.crop_id,
+               c.name AS crop_name,
+               cf.name AS family_name,
+               h.plant_date,
+               h.harvest_date
+        FROM cell_crop_history h
+        JOIN crops c ON c.id = h.crop_id
+        JOIN crop_families cf ON cf.id = c.family_id
+        WHERE h.plot_id = $1
+          AND h.x_index >= $2 AND h.x_index < $2 + $4
+          AND h.y_index >= $3 AND h.y_index < $3 + $5
+        ORDER BY h.plant_date DESC
+    `
+	rows, err := r.db.Query(ctx, query, plotID, xStart, yStart, width, height)
+	if err != nil {
+		return nil, r.mapper.Map(err)
+	}
+	defer rows.Close()
+
+	var entries []dto.BedCropHistoryEntry
+	for rows.Next() {
+		var e dto.BedCropHistoryEntry
+		if err := rows.Scan(&e.CropID, &e.CropName, &e.FamilyName, &e.PlantDate, &e.HarvestDate); err != nil {
+			return nil, r.mapper.Map(err)
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }

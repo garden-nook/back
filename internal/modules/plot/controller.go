@@ -17,17 +17,20 @@ type Controller struct {
 	plotSvc           *service.PlotService
 	eventSvc          *service.EventService
 	recommendationSvc *service.RecommendationService
+	historySvc        *service.HistoryService
 }
 
 func NewController(
 	plotSvc *service.PlotService,
 	eventSvc *service.EventService,
 	recommendationSvc *service.RecommendationService,
+	historySvc *service.HistoryService,
 ) *Controller {
 	return &Controller{
 		plotSvc:           plotSvc,
 		eventSvc:          eventSvc,
 		recommendationSvc: recommendationSvc,
+		historySvc:        historySvc,
 	}
 }
 
@@ -227,6 +230,26 @@ func (c *Controller) GetBedRecommendations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	response.JSON(w, http.StatusOK, recommendations)
+}
+
+// GetBedCropHistory godoc
+// @Summary      Получить историю посадок для грядки
+// @Tags         plots
+// @Produce      json
+// @Security     UserAuth
+// @Param        id  path      string  true  "Bed ID"
+// @Success      200 {object} response.Response{data=[]dto.BedCropHistoryEntry}
+// @Router       /api/v1/plots/bed/{id}/history [get]
+func (c *Controller) GetBedCropHistory(w http.ResponseWriter, r *http.Request) {
+	bedID := chi.URLParam(r, "id")
+	ownerID := middleware.SubID(r.Context())
+
+	history, err := c.historySvc.GetBedCropHistory(r.Context(), bedID, ownerID)
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, history)
 }
 
 //// ---------- TIMELINE ----------
