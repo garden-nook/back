@@ -30,7 +30,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.2.1
+// @version         0.2.2
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -95,7 +95,8 @@ func main() {
 	plotsSvc := plotSvcs.NewPlotService(pool, plotRepo, gridRepo, bedRepo, objectRepo, eventRepo, seh)
 	eventSvc := plotSvcs.NewEventService(pool, plotRepo, bedRepo, objectRepo, eventRepo, historyRepo, seh)
 	recommendationSvc := plotSvcs.NewRecommendationService(bedRepo, plotRepo, gridRepo, historyRepo, cropSvc, ruleCache, seh)
-	plotsCtrl := plots.NewController(plotsSvc, eventSvc, recommendationSvc)
+	historySvc := plotSvcs.NewHistoryService(bedRepo, plotRepo, historyRepo, seh)
+	plotsCtrl := plots.NewController(plotsSvc, eventSvc, recommendationSvc, historySvc)
 
 	r := chi.NewRouter()
 

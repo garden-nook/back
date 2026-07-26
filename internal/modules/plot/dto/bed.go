@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type BedCreatedRequest struct {
 	Name   string `json:"name"`
 	XStart int    `json:"x_start"`
@@ -31,4 +33,12 @@ type CropRemovedRequest struct {
 	BedID     string  `json:"bed_id"`
 	Harvested bool    `json:"harvested"`
 	Date      *string `json:"date,omitempty"`
+}
+
+type BedCropHistoryEntry struct {
+	CropID      int32     `json:"crop_id"`
+	CropName    string    `json:"crop_name"`
+	FamilyName  string    `json:"family_name"`
+	PlantDate   time.Time `json:"plant_date"`
+	HarvestDate time.Time `json:"harvest_date"`
 }
