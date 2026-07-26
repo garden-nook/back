@@ -30,7 +30,7 @@ import (
 )
 
 // @title           Garden Nook API
-// @version         0.2.0
+// @version         0.2.1
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth

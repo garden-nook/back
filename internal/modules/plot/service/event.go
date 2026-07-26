@@ -312,7 +312,65 @@ func (s *EventService) handleObjectCreated(ctx context.Context, plotID string, p
 	if err := json.Unmarshal(payloadStr, &req); err != nil {
 		return apperrors.ErrBadRequest
 	}
-	return errors.New("not implemented")
+
+	plot, err := s.plotRepo.WithTx(tx).GetPlotByID(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get plot for object creation")
+	}
+
+	if req.XStart < 0 || req.YStart < 0 ||
+		req.XStart+req.Width > plot.GridCols ||
+		req.YStart+req.Height > plot.GridRows {
+		return apperrors.ErrBadRequest
+	}
+
+	beds, err := s.bedRepo.WithTx(tx).GetBedsByPlot(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get beds for overlap check")
+	}
+	for _, bed := range beds {
+		if rectanglesOverlap(req.XStart, req.YStart, req.Width, req.Height,
+			bed.XStart, bed.YStart, bed.Width, bed.Height) {
+			return apperrors.ErrConflict
+		}
+	}
+
+	objects, err := s.objectRepo.WithTx(tx).GetObjectsByPlot(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get objects for overlap check")
+	}
+	for _, obj := range objects {
+		if rectanglesOverlap(req.XStart, req.YStart, req.Width, req.Height,
+			obj.XStart, obj.YStart, obj.Width, obj.Height) {
+			return apperrors.ErrConflict
+		}
+	}
+
+	objectID := uuid.New().String()
+
+	if err = s.objectRepo.WithTx(tx).CreateObjectWithID(ctx, objectID, plotID, req.Name, req.ObjectType,
+		req.XStart, req.YStart, req.Width, req.Height); err != nil {
+		return s.seh.HandleError(err, "insert object")
+	}
+
+	eventPayload := payload.ObjectCreated{
+		ObjectID:   objectID,
+		Name:       req.Name,
+		ObjectType: req.ObjectType,
+		XStart:     req.XStart,
+		YStart:     req.YStart,
+		Width:      req.Width,
+		Height:     req.Height,
+	}
+	rawPayload, err := json.Marshal(eventPayload)
+	if err != nil {
+		return s.seh.HandleError(err, "marshal event")
+	}
+	if _, err = s.eventRepo.WithTx(tx).AppendEvent(ctx, plotID, enum.EventTypeObjectCreated, rawPayload); err != nil {
+		return s.seh.HandleError(err, "append event")
+	}
+
+	return nil
 }
 
 func (s *EventService) handleObjectUpdated(ctx context.Context, plotID string, payloadStr json.RawMessage, tx pgx.Tx) error {
@@ -320,7 +378,93 @@ func (s *EventService) handleObjectUpdated(ctx context.Context, plotID string, p
 	if err := json.Unmarshal(payloadStr, &req); err != nil {
 		return apperrors.ErrBadRequest
 	}
-	return errors.New("not implemented")
+
+	obj, err := s.objectRepo.WithTx(tx).GetObjectByID(ctx, req.ObjectID)
+	if err != nil {
+		return s.seh.HandleError(err, "get object for update")
+	}
+	if obj.PlotID != plotID {
+		return apperrors.ErrNotFound
+	}
+
+	newX := obj.XStart
+	newY := obj.YStart
+	newW := obj.Width
+	newH := obj.Height
+	newName := obj.Name
+	newType := obj.ObjectType
+	if req.XStart != nil {
+		newX = *req.XStart
+	}
+	if req.YStart != nil {
+		newY = *req.YStart
+	}
+	if req.Width != nil {
+		newW = *req.Width
+	}
+	if req.Height != nil {
+		newH = *req.Height
+	}
+	if req.Name != nil {
+		newName = *req.Name
+	}
+	if req.ObjectType != nil {
+		newType = *req.ObjectType
+	}
+
+	plot, err := s.plotRepo.WithTx(tx).GetPlotByID(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get plot for object update")
+	}
+	if newX < 0 || newY < 0 || newX+newW > plot.GridCols || newY+newH > plot.GridRows {
+		return apperrors.ErrBadRequest
+	}
+
+	beds, err := s.bedRepo.WithTx(tx).GetBedsByPlot(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get beds for overlap check")
+	}
+	for _, bed := range beds {
+		if rectanglesOverlap(newX, newY, newW, newH, bed.XStart, bed.YStart, bed.Width, bed.Height) {
+			return apperrors.ErrConflict
+		}
+	}
+
+	objects, err := s.objectRepo.WithTx(tx).GetObjectsByPlot(ctx, plotID)
+	if err != nil {
+		return s.seh.HandleError(err, "get objects for overlap check")
+	}
+	for _, other := range objects {
+		if other.ObjectID == req.ObjectID {
+			continue
+		}
+		if rectanglesOverlap(newX, newY, newW, newH, other.XStart, other.YStart, other.Width, other.Height) {
+			return apperrors.ErrConflict
+		}
+	}
+
+	if err = s.objectRepo.WithTx(tx).UpdateObject(ctx, req.ObjectID, req.Name, req.ObjectType, req.XStart, req.YStart, req.Width, req.Height); err != nil {
+		return s.seh.HandleError(err, "update object")
+	}
+
+	eventPayload := payload.ObjectUpdated{
+		ObjectID:   req.ObjectID,
+		Name:       newName,
+		ObjectType: newType,
+		XStart:     newX,
+		YStart:     newY,
+		Width:      newW,
+		Height:     newH,
+	}
+	rawPayload, err := json.Marshal(eventPayload)
+	if err != nil {
+		return s.seh.HandleError(err, "marshal event")
+	}
+	if _, err = s.eventRepo.WithTx(tx).AppendEvent(ctx, plotID, enum.EventTypeObjectUpdated, rawPayload); err != nil {
+		return s.seh.HandleError(err, "append event")
+	}
+
+	return nil
 }
 
 func (s *EventService) handleObjectDeleted(ctx context.Context, plotID string, payloadStr json.RawMessage, tx pgx.Tx) error {
@@ -328,7 +472,29 @@ func (s *EventService) handleObjectDeleted(ctx context.Context, plotID string, p
 	if err := json.Unmarshal(payloadStr, &req); err != nil {
 		return apperrors.ErrBadRequest
 	}
-	return errors.New("not implemented")
+
+	obj, err := s.objectRepo.WithTx(tx).GetObjectByID(ctx, req.ObjectID)
+	if err != nil {
+		return s.seh.HandleError(err, "get object for deletion")
+	}
+	if obj.PlotID != plotID {
+		return apperrors.ErrNotFound
+	}
+
+	if err = s.objectRepo.WithTx(tx).DeleteObject(ctx, req.ObjectID); err != nil {
+		return s.seh.HandleError(err, "delete object")
+	}
+
+	eventPayload := payload.ObjectDeleted{ObjectID: req.ObjectID}
+	rawPayload, err := json.Marshal(eventPayload)
+	if err != nil {
+		return s.seh.HandleError(err, "marshal event")
+	}
+	if _, err = s.eventRepo.WithTx(tx).AppendEvent(ctx, plotID, enum.EventTypeObjectDeleted, rawPayload); err != nil {
+		return s.seh.HandleError(err, "append event")
+	}
+
+	return nil
 }
 
 func (s *EventService) handleCropPlanted(ctx context.Context, plotID string, payloadStr json.RawMessage, tx pgx.Tx) error {
