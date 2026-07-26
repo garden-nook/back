@@ -10,6 +10,7 @@ type ObjectCreatedRequest struct {
 }
 
 type ObjectUpdatedRequest struct {
+	ObjectID   string  `json:"object_id"`
 	Name       *string `json:"name,omitempty"`
 	ObjectType *int32  `json:"object_type,omitempty"`
 	XStart     *int    `json:"x_start,omitempty"`
