@@ -77,13 +77,24 @@ func (r *CropRuleRepo) GetCropRelations(ctx context.Context, cropID int32) (*mod
 
 	query := `
 		SELECT cr.context_type, cr.score_modifier,
-               cr.context_crop_id, c.name AS crop_name,
-               cr.context_family_id, cf.name AS family_name
+               cr.subject_crop_id,  sub_c.name AS subject_crop_name,
+               cr.subject_family_id, sub_f.name AS subject_family_name,
+               cr.context_crop_id,  ctx_c.name AS context_crop_name,
+               cr.context_family_id, ctx_f.name AS context_family_name
         FROM crop_rules cr
-        LEFT JOIN crops c ON cr.context_crop_id = c.id
-        LEFT JOIN crop_families cf ON cr.context_family_id = cf.id
-        WHERE (cr.subject_crop_id = $1 OR cr.subject_family_id = $2)
-          AND cr.context_type IN ($3, $4)
+        LEFT JOIN crops sub_c ON cr.subject_crop_id = sub_c.id
+        LEFT JOIN crop_families sub_f ON cr.subject_family_id = sub_f.id
+        LEFT JOIN crops ctx_c ON cr.context_crop_id = ctx_c.id
+        LEFT JOIN crop_families ctx_f ON cr.context_family_id = ctx_f.id
+        WHERE 
+            (
+                (cr.subject_crop_id = $1 OR cr.subject_family_id = $2)
+                AND cr.context_type IN ($3, $4)
+            )
+            OR (
+                cr.context_type = $3
+                AND (cr.context_crop_id = $1 OR cr.context_family_id = $2)
+            )
 	`
 
 	rows, err := r.db.Query(ctx, query,
@@ -98,33 +109,26 @@ func (r *CropRuleRepo) GetCropRelations(ctx context.Context, cropID int32) (*mod
 	result := &model.CropRelations{}
 	for rows.Next() {
 		var (
-			contextType enum.RuleContextType
-			score       int32
-			cropIDPtr   *int32
-			cropName    *string
-			familyIDPtr *int32
-			familyName  *string
+			contextType                          enum.RuleContextType
+			score                                int32
+			subjectCropID, contextCropID         *int32
+			subjectCropName, contextCropName     *string
+			subjectFamilyID, contextFamilyID     *int32
+			subjectFamilyName, contextFamilyName *string
 		)
-		if err = rows.Scan(&contextType, &score,
-			&cropIDPtr, &cropName, &familyIDPtr, &familyName); err != nil {
+		if err := rows.Scan(&contextType, &score,
+			&subjectCropID, &subjectCropName, &subjectFamilyID, &subjectFamilyName,
+			&contextCropID, &contextCropName, &contextFamilyID, &contextFamilyName); err != nil {
 			return nil, r.mapper.Map(err)
 		}
 
 		switch {
-		case cropIDPtr != nil:
-			rel := model.CropRelation{
-				CropID:   *cropIDPtr,
-				CropName: *cropName,
-				Score:    score,
-			}
-			appendCropRelation(result, contextType, rel)
-		case familyIDPtr != nil:
-			rel := model.FamilyRelation{
-				FamilyID:   *familyIDPtr,
-				FamilyName: *familyName,
-				Score:      score,
-			}
-			appendFamilyRelation(result, contextType, rel)
+		case contextType == 1 && isRelated(cropID, familyID, subjectCropID, subjectFamilyID):
+			addCropOrFamily(result, false, score, contextCropID, contextCropName, contextFamilyID, contextFamilyName)
+		case contextType == 1 && isRelated(cropID, familyID, contextCropID, contextFamilyID):
+			addCropOrFamily(result, true, score, subjectCropID, subjectCropName, subjectFamilyID, subjectFamilyName)
+		case contextType == 3 && isRelated(cropID, familyID, subjectCropID, subjectFamilyID):
+			addCompanionCropOrFamily(result, score, contextCropID, contextCropName, contextFamilyID, contextFamilyName)
 		}
 	}
 	if err = rows.Err(); err != nil {
@@ -134,48 +138,60 @@ func (r *CropRuleRepo) GetCropRelations(ctx context.Context, cropID int32) (*mod
 	return result, nil
 }
 
-func appendCropRelation(r *model.CropRelations, ctxType enum.RuleContextType, rel model.CropRelation) {
-	switch ctxType {
-	case enum.RuleContextPredecessor:
-		if rel.Score > 0 {
-			r.GoodPredecessors = append(r.GoodPredecessors, rel)
-		} else if rel.Score < 0 {
-			r.BadPredecessors = append(r.BadPredecessors, rel)
+func isRelated(cropID, familyID int32, relCropID, relFamilyID *int32) bool {
+	return (relCropID != nil && *relCropID == cropID) || (relFamilyID != nil && *relFamilyID == familyID)
+}
+
+func addCropOrFamily(result *model.CropRelations, isSuccessor bool, score int32,
+	cropID *int32, cropName *string, familyID *int32, familyName *string) {
+	if cropID != nil {
+		rel := model.CropRelation{CropID: *cropID, CropName: *cropName, Score: score}
+		if isSuccessor {
+			if score > 0 {
+				result.GoodSuccessors = append(result.GoodSuccessors, rel)
+			} else {
+				result.BadSuccessors = append(result.BadSuccessors, rel)
+			}
+		} else {
+			if score > 0 {
+				result.GoodPredecessors = append(result.GoodPredecessors, rel)
+			} else {
+				result.BadPredecessors = append(result.BadPredecessors, rel)
+			}
 		}
-	//case RuleContextSuccessor:
-	//	if rel.Score > 0 {
-	//		r.GoodSuccessors = append(r.GoodSuccessors, rel)
-	//	} else if rel.Score < 0 {
-	//		r.BadSuccessors = append(r.BadSuccessors, rel)
-	//	}
-	case enum.RuleContextCompanion:
-		if rel.Score > 0 {
-			r.GoodCompanions = append(r.GoodCompanions, rel)
-		} else if rel.Score < 0 {
-			r.BadCompanions = append(r.BadCompanions, rel)
+	} else if familyID != nil {
+		rel := model.FamilyRelation{FamilyID: *familyID, FamilyName: *familyName, Score: score}
+		if isSuccessor {
+			if score > 0 {
+				result.GoodSuccessorFamilies = append(result.GoodSuccessorFamilies, rel)
+			} else {
+				result.BadSuccessorFamilies = append(result.BadSuccessorFamilies, rel)
+			}
+		} else {
+			if score > 0 {
+				result.GoodPredecessorFamilies = append(result.GoodPredecessorFamilies, rel)
+			} else {
+				result.BadPredecessorFamilies = append(result.BadPredecessorFamilies, rel)
+			}
 		}
 	}
 }
 
-func appendFamilyRelation(r *model.CropRelations, ctxType enum.RuleContextType, rel model.FamilyRelation) {
-	switch ctxType {
-	case enum.RuleContextPredecessor:
-		if rel.Score > 0 {
-			r.GoodPredecessorFamilies = append(r.GoodPredecessorFamilies, rel)
-		} else if rel.Score < 0 {
-			r.BadPredecessorFamilies = append(r.BadPredecessorFamilies, rel)
+func addCompanionCropOrFamily(result *model.CropRelations, score int32,
+	cropID *int32, cropName *string, familyID *int32, familyName *string) {
+	if cropID != nil {
+		rel := model.CropRelation{CropID: *cropID, CropName: *cropName, Score: score}
+		if score > 0 {
+			result.GoodCompanions = append(result.GoodCompanions, rel)
+		} else {
+			result.BadCompanions = append(result.BadCompanions, rel)
 		}
-	//case RuleContextSuccessor:
-	//	if rel.Score > 0 {
-	//		r.GoodSuccessorFamilies = append(r.GoodSuccessorFamilies, rel)
-	//	} else if rel.Score < 0 {
-	//		r.BadSuccessorFamilies = append(r.BadSuccessorFamilies, rel)
-	//	}
-	case enum.RuleContextCompanion:
-		if rel.Score > 0 {
-			r.GoodCompanionFamilies = append(r.GoodCompanionFamilies, rel)
-		} else if rel.Score < 0 {
-			r.BadCompanionFamilies = append(r.BadCompanionFamilies, rel)
+	} else if familyID != nil {
+		rel := model.FamilyRelation{FamilyID: *familyID, FamilyName: *familyName, Score: score}
+		if score > 0 {
+			result.GoodCompanionFamilies = append(result.GoodCompanionFamilies, rel)
+		} else {
+			result.BadCompanionFamilies = append(result.BadCompanionFamilies, rel)
 		}
 	}
 }
