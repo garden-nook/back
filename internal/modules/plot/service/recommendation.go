@@ -187,6 +187,7 @@ func (s *RecommendationService) GetBedRecommendations(
 			FamilyName: crop.FamilyName,
 			Score:      score,
 			Reasons:    reasons,
+			IsPositive: score > 0,
 		})
 	}
 

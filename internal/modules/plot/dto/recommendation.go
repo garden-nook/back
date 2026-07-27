@@ -11,6 +11,7 @@ type CropRecommendation struct {
 	FamilyName string         `json:"family_name"`
 	Score      int32          `json:"-"`
 	Reasons    []ReasonDetail `json:"reasons"`
+	IsPositive bool           `json:"ispositive"`
 }
 
 type ReasonDetail struct {
