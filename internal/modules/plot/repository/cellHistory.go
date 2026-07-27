@@ -74,13 +74,14 @@ func (r *HistoryRepo) GetCropHistoryForBed(ctx context.Context, plotID string, x
                c.name AS crop_name,
                cf.name AS family_name,
                h.plant_date,
-               h.harvest_date
+               MAX(h.harvest_date) as harvest_date
         FROM cell_crop_history h
         JOIN crops c ON c.id = h.crop_id
         JOIN crop_families cf ON cf.id = c.family_id
         WHERE h.plot_id = $1
           AND h.x_index >= $2 AND h.x_index < $2 + $4
           AND h.y_index >= $3 AND h.y_index < $3 + $5
+        GROUP BY h.crop_id, c.name, cf.name, h.plant_date
         ORDER BY h.plant_date DESC
     `
 	rows, err := r.db.Query(ctx, query, plotID, xStart, yStart, width, height)
