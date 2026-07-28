@@ -22,38 +22,19 @@ CREATE TABLE soil_types (
     description TEXT
 );
 
-CREATE TABLE plots (
-    plot_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(200) NOT NULL,
-    description TEXT,
-    owner_id UUID NOT NULL REFERENCES users(user_id),
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    soil_type INT NOT NULL REFERENCES soil_types(id),
-    boundary GEOMETRY(Polygon, 3857) NOT NULL,
-    area_sq_m DECIMAL(12,2),
-    grid_cell_size DOUBLE PRECISION NOT NULL DEFAULT 0.5,
-    grid_cols INT NOT NULL,
-    grid_rows INT NOT NULL
-);
-CREATE INDEX idx_plots_owner_id_is_deleted ON plots (owner_id, is_deleted);
-CREATE INDEX idx_plots_soil_type ON plots (soil_type);
-CREATE INDEX idx_plots_boundary_gist ON plots USING GIST(boundary);
-
 CREATE TABLE crop_families (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,
-    description TEXT
+   id SERIAL PRIMARY KEY,
+   name VARCHAR(100) NOT NULL UNIQUE,
+   description TEXT
 );
 
 CREATE TABLE crops (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    family_id INT NOT NULL REFERENCES crop_families(id),
-    vegetation_days_avg INT NOT NULL,
-    sun_needs INT, -- shade, partial, full
-    is_deleted BOOLEAN DEFAULT FALSE
+   id SERIAL PRIMARY KEY,
+   name VARCHAR(100) NOT NULL,
+   family_id INT NOT NULL REFERENCES crop_families(id),
+   vegetation_days_avg INT NOT NULL,
+   sun_needs INT, -- shade, partial, full
+   is_deleted BOOLEAN DEFAULT FALSE
 );
 CREATE INDEX idx_crops_family_id ON crops (family_id);
 
@@ -77,6 +58,25 @@ CREATE INDEX idx_crop_rules_subject_crop_id ON crop_rules (subject_crop_id);
 CREATE INDEX idx_crop_rules_subject_family_id ON crop_rules (subject_family_id);
 CREATE INDEX idx_crop_rules_context_crop_id ON crop_rules (context_crop_id);
 CREATE INDEX idx_crop_rules_context_family_id ON crop_rules (context_family_id);
+
+CREATE TABLE plots (
+    plot_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    owner_id UUID NOT NULL REFERENCES users(user_id),
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    soil_type INT NOT NULL REFERENCES soil_types(id),
+    boundary GEOMETRY(Polygon, 3857) NOT NULL,
+    area_sq_m DECIMAL(12,2),
+    grid_cell_size DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    grid_cols INT NOT NULL,
+    grid_rows INT NOT NULL
+);
+CREATE INDEX idx_plots_owner_id_is_deleted ON plots (owner_id, is_deleted);
+CREATE INDEX idx_plots_soil_type ON plots (soil_type);
+CREATE INDEX idx_plots_boundary_gist ON plots USING GIST(boundary);
 
 CREATE TABLE event_store (
     event_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

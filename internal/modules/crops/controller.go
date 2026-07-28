@@ -1,59 +1,164 @@
 package crops
 
 import (
-	"errors"
+	"garden-nook/internal/modules/crops/dto"
+	_ "garden-nook/internal/modules/crops/model"
+	"garden-nook/internal/modules/crops/service"
+	"garden-nook/internal/pkg/helpers"
 	"net/http"
 	"strconv"
 
 	"garden-nook/internal/middleware"
-	"garden-nook/internal/pkg/apperrors"
 	"garden-nook/internal/pkg/response"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type Controller struct {
-	svc *Service
+	soilTypeSvc   *service.SoilTypeService
+	cropFamilySvc *service.CropFamilyService
+	cropSvc       *service.CropService
+	cropRuleSvc   *service.CropRuleService
 }
 
-func NewController(svc *Service) *Controller {
-	return &Controller{svc: svc}
-}
-
-// mapError преобразует доменную ошибку в HTTP-статус.
-func mapError(err error) int {
-	switch {
-	case errors.Is(err, apperrors.ErrNotFound):
-		return http.StatusNotFound
-	case errors.Is(err, apperrors.ErrBadRequest):
-		return http.StatusBadRequest
-	case errors.Is(err, apperrors.ErrConflict):
-		return http.StatusConflict
-	case errors.Is(err, apperrors.ErrForbidden):
-		return http.StatusForbidden
-	case errors.Is(err, apperrors.ErrUnauthorized):
-		return http.StatusUnauthorized
-	default:
-		return http.StatusInternalServerError
+func NewController(
+	soilTypeSvc *service.SoilTypeService,
+	cropFamilySvc *service.CropFamilyService,
+	cropSvc *service.CropService,
+	cropRuleSvc *service.CropRuleService,
+) *Controller {
+	return &Controller{
+		soilTypeSvc:   soilTypeSvc,
+		cropFamilySvc: cropFamilySvc,
+		cropSvc:       cropSvc,
+		cropRuleSvc:   cropRuleSvc,
 	}
 }
 
-func writeErr(w http.ResponseWriter, err error) {
-	status := mapError(err)
-	msg := err.Error()
-	if status == http.StatusInternalServerError {
-		msg = "internal server error"
+// ---------- SOIL TYPES ----------
+
+// ListSoilTypes godoc
+// @Summary      Список типов почвы
+// @Description  Возвращает все типы почв из справочника
+// @Tags         soils
+// @Produce      json
+// @Success      200 {object} response.Response{data=[]model.SoilType}
+// @Failure      500 {object} response.Response
+// @Router       /api/v1/soil-types [get]
+func (c *Controller) ListSoilTypes(w http.ResponseWriter, r *http.Request) {
+	list, _, err := c.soilTypeSvc.ListSoilTypes(r.Context())
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
 	}
-	response.Error(w, status, msg)
+	response.JSON(w, http.StatusOK, list)
 }
 
-func parseIntParam(r *http.Request, name string) (int32, error) {
-	v := chi.URLParam(r, name)
-	i, err := strconv.Atoi(v)
-	if err != nil || i <= 0 {
-		return 0, apperrors.ErrBadRequest
+// GetSoilType godoc
+// @Summary      Получить тип почвы по ID
+// @Tags         soils
+// @Produce      json
+// @Param        id   path      int  true  "ID типа почвы"
+// @Success      200 {object} response.Response{data=model.SoilType}
+// @Failure      400 {object} response.Response
+// @Failure      404 {object} response.Response
+// @Router       /api/v1/soil-types/{id} [get]
+func (c *Controller) GetSoilType(w http.ResponseWriter, r *http.Request) {
+	id, err := helpers.ParseIntParam(r, "id")
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
 	}
-	return int32(i), nil
+	f, err := c.soilTypeSvc.GetSoilType(r.Context(), id)
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, f)
+}
+
+// CreateSoilType godoc
+// @Summary      Создать тип почвы (admin)
+// @Tags         soils-admin
+// @Accept       json
+// @Produce      json
+// @Security     AdminAuth
+// @Param        body  body      dto.CreateSoilTypeRequest  true  "Данные типа почвы"
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
+// @Failure      400 {object} response.Response
+// @Failure      401 {object} response.Response
+// @Failure      403 {object} response.Response
+// @Failure      409 {object} response.Response
+// @Router       /api/v1/admin/soil-types [post]
+func (c *Controller) CreateSoilType(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateSoilTypeRequest
+	if err := middleware.DecodeAndValidate(r, &req); err != nil {
+		middleware.WriteValidationError(w, err)
+		return
+	}
+	f, err := c.soilTypeSvc.CreateSoilType(r.Context(), req)
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	response.JSON(w, http.StatusCreated, f)
+}
+
+// UpdateSoilType godoc
+// @Summary      Обновить тип почвы (admin)
+// @Tags         soils-admin
+// @Accept       json
+// @Produce      json
+// @Security     AdminAuth
+// @Param        id    path      int                  	true  "ID типа почвы"
+// @Param        body  body      dto.UpdateSoilTypeRequest  true  "Обновляемые поля"
+// @Success      200 {object} response.Response{data=response.CreateUpdateIntId}
+// @Failure      400 {object} response.Response
+// @Failure      401 {object} response.Response
+// @Failure      403 {object} response.Response
+// @Failure      404 {object} response.Response
+// @Router       /api/v1/admin/soil-types/{id} [put]
+func (c *Controller) UpdateSoilType(w http.ResponseWriter, r *http.Request) {
+	id, err := helpers.ParseIntParam(r, "id")
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	var req dto.UpdateSoilTypeRequest
+	if err = middleware.DecodeAndValidate(r, &req); err != nil {
+		middleware.WriteValidationError(w, err)
+		return
+	}
+	f, err := c.soilTypeSvc.UpdateSoilType(r.Context(), id, req)
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, f)
+}
+
+// DeleteSoilType godoc
+// @Summary      Удалить тип почвы (admin)
+// @Tags         soils-admin
+// @Produce      json
+// @Security     AdminAuth
+// @Param        id  path      int  true  "ID типа почвы"
+// @Success      204 "No Content"
+// @Failure      400 {object} response.Response
+// @Failure      401 {object} response.Response
+// @Failure      403 {object} response.Response
+// @Failure      404 {object} response.Response
+// @Failure      409 {object} response.Response "Есть связанные культуры"
+// @Router       /api/v1/admin/soil-types/{id} [delete]
+func (c *Controller) DeleteSoilType(w http.ResponseWriter, r *http.Request) {
+	id, err := helpers.ParseIntParam(r, "id")
+	if err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	if err = c.soilTypeSvc.DeleteSoilType(r.Context(), id); err != nil {
+		helpers.WriteErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ---------- FAMILIES ----------
@@ -63,13 +168,13 @@ func parseIntParam(r *http.Request, name string) (int32, error) {
 // @Description  Возвращает все семейства культур из справочника
 // @Tags         crops
 // @Produce      json
-// @Success      200 {object} response.Response{data=[]CropFamily}
+// @Success      200 {object} response.Response{data=[]model.CropFamily}
 // @Failure      500 {object} response.Response
 // @Router       /api/v1/crop-families [get]
 func (c *Controller) ListFamilies(w http.ResponseWriter, r *http.Request) {
-	list, err := c.svc.ListFamilies(r.Context())
+	list, _, err := c.cropFamilySvc.ListFamilies(r.Context())
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, list)
@@ -80,19 +185,19 @@ func (c *Controller) ListFamilies(w http.ResponseWriter, r *http.Request) {
 // @Tags         crops
 // @Produce      json
 // @Param        id   path      int  true  "ID семейства"
-// @Success      200 {object} response.Response{data=CropFamily}
+// @Success      200 {object} response.Response{data=model.CropFamily}
 // @Failure      400 {object} response.Response
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/crop-families/{id} [get]
 func (c *Controller) GetFamily(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := helpers.ParseIntParam(r, "id")
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	f, err := c.svc.GetFamily(r.Context(), id)
+	f, err := c.cropFamilySvc.GetFamily(r.Context(), id)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, f)
@@ -104,22 +209,22 @@ func (c *Controller) GetFamily(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     AdminAuth
-// @Param        body  body      CreateFamilyRequest  true  "Данные семейства"
-// @Success      201 {object} response.Response{data=CropFamily}
+// @Param        body  body      dto.CreateFamilyRequest  true  "Данные семейства"
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
 // @Failure      409 {object} response.Response
 // @Router       /api/v1/admin/crop-families [post]
 func (c *Controller) CreateFamily(w http.ResponseWriter, r *http.Request) {
-	var req CreateFamilyRequest
+	var req dto.CreateFamilyRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
 	}
-	f, err := c.svc.CreateFamily(r.Context(), req)
+	f, err := c.cropFamilySvc.CreateFamily(r.Context(), req)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, f)
@@ -132,27 +237,27 @@ func (c *Controller) CreateFamily(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     AdminAuth
 // @Param        id    path      int                  true  "ID семейства"
-// @Param        body  body      UpdateFamilyRequest  true  "Обновляемые поля"
-// @Success      200 {object} response.Response{data=CropFamily}
+// @Param        body  body      dto.UpdateFamilyRequest  true  "Обновляемые поля"
+// @Success      200 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/admin/crop-families/{id} [put]
 func (c *Controller) UpdateFamily(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := helpers.ParseIntParam(r, "id")
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	var req UpdateFamilyRequest
-	if err := middleware.DecodeAndValidate(r, &req); err != nil {
+	var req dto.UpdateFamilyRequest
+	if err = middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
 	}
-	f, err := c.svc.UpdateFamily(r.Context(), id, req)
+	f, err := c.cropFamilySvc.UpdateFamily(r.Context(), id, req)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, f)
@@ -172,13 +277,13 @@ func (c *Controller) UpdateFamily(w http.ResponseWriter, r *http.Request) {
 // @Failure      409 {object} response.Response "Есть связанные культуры"
 // @Router       /api/v1/admin/crop-families/{id} [delete]
 func (c *Controller) DeleteFamily(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := helpers.ParseIntParam(r, "id")
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	if err := c.svc.DeleteFamily(r.Context(), id); err != nil {
-		writeErr(w, err)
+	if err = c.cropFamilySvc.DeleteFamily(r.Context(), id); err != nil {
+		helpers.WriteErr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -192,16 +297,12 @@ func (c *Controller) DeleteFamily(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        family_id  query     int     false  "Фильтр по семейству"
 // @Param        search     query     string  false  "Поиск по названию"
-// @Param        page       query     int     false  "Номер страницы (default 1)"
-// @Param        limit      query     int     false  "Элементов на странице (default 50, max 100)"
-// @Success      200 {object} response.Response{data=[]Crop}
+// @Success      200 {object} response.Response{data=[]model.Crop}
 // @Router       /api/v1/crops [get]
 func (c *Controller) ListCrops(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	filter := ListCropsFilter{
+	filter := dto.ListCropsFilter{
 		Search: q.Get("search"),
-		Page:   atoiDefault(q.Get("page"), 1),
-		Limit:  atoiDefault(q.Get("limit"), 50),
 	}
 	if fid := q.Get("family_id"); fid != "" {
 		if i, err := strconv.Atoi(fid); err == nil {
@@ -210,32 +311,32 @@ func (c *Controller) ListCrops(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	list, total, err := c.svc.ListCrops(r.Context(), filter)
+	list, _, err := c.cropSvc.ListCrops(r.Context(), filter)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	response.Paginated(w, list, total, filter.Page, filter.Limit)
+	response.JSON(w, http.StatusOK, list)
 }
 
 // GetCrop godoc
-// @Summary      Получить культуру по ID
+// @Summary      Получить культуру по ID и связи с другими культурами
 // @Tags         crops
 // @Produce      json
 // @Param        id   path      int  true  "ID культуры"
-// @Success      200 {object} response.Response{data=Crop}
+// @Success      200 {object} response.Response{data=dto.CropExtended}
 // @Failure      400 {object} response.Response
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/crops/{id} [get]
 func (c *Controller) GetCrop(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := helpers.ParseIntParam(r, "id")
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	cr, err := c.svc.GetCrop(r.Context(), id)
+	cr, err := c.cropSvc.GetCrop(r.Context(), id)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, cr)
@@ -247,21 +348,21 @@ func (c *Controller) GetCrop(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     AdminAuth
-// @Param        body  body      CreateCropRequest  true  "Данные культуры"
-// @Success      201 {object} response.Response{data=Crop}
+// @Param        body  body      dto.CreateCropRequest  true  "Данные культуры"
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
 // @Router       /api/v1/admin/crops [post]
 func (c *Controller) CreateCrop(w http.ResponseWriter, r *http.Request) {
-	var req CreateCropRequest
+	var req dto.CreateCropRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
 	}
-	cr, err := c.svc.CreateCrop(r.Context(), req)
+	cr, err := c.cropSvc.CreateCrop(r.Context(), req)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, cr)
@@ -274,27 +375,27 @@ func (c *Controller) CreateCrop(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Security     AdminAuth
 // @Param        id    path      int                 true  "ID культуры"
-// @Param        body  body      UpdateCropRequest   true  "Обновляемые поля"
-// @Success      200 {object} response.Response{data=Crop}
+// @Param        body  body      dto.UpdateCropRequest   true  "Обновляемые поля"
+// @Success      200 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/admin/crops/{id} [put]
 func (c *Controller) UpdateCrop(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := helpers.ParseIntParam(r, "id")
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	var req UpdateCropRequest
+	var req dto.UpdateCropRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
 	}
-	cr, err := c.svc.UpdateCrop(r.Context(), id, req)
+	cr, err := c.cropSvc.UpdateCrop(r.Context(), id, req)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, cr)
@@ -313,13 +414,13 @@ func (c *Controller) UpdateCrop(w http.ResponseWriter, r *http.Request) {
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/admin/crops/{id} [delete]
 func (c *Controller) DeleteCrop(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := helpers.ParseIntParam(r, "id")
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	if err := c.svc.DeleteCrop(r.Context(), id); err != nil {
-		writeErr(w, err)
+	if err := c.cropSvc.DeleteCrop(r.Context(), id); err != nil {
+		helpers.WriteErr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -332,14 +433,14 @@ func (c *Controller) DeleteCrop(w http.ResponseWriter, r *http.Request) {
 // @Tags         crops-admin
 // @Produce      json
 // @Security     AdminAuth
-// @Success      200 {object} response.Response{data=[]CropRule}
+// @Success      200 {object} response.Response{data=[]model.CropRule}
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
 // @Router       /api/v1/admin/crop-rules [get]
 func (c *Controller) ListRules(w http.ResponseWriter, r *http.Request) {
-	list, err := c.svc.ListRules(r.Context())
+	list, _, err := c.cropRuleSvc.ListRules(r.Context())
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusOK, list)
@@ -351,21 +452,21 @@ func (c *Controller) ListRules(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Security     AdminAuth
-// @Param        body  body      CreateRuleRequest  true  "Правило"
-// @Success      201 {object} response.Response{data=CropRule}
+// @Param        body  body      dto.CreateRuleRequest  true  "Правило"
+// @Success      201 {object} response.Response{data=response.CreateUpdateIntId}
 // @Failure      400 {object} response.Response
 // @Failure      401 {object} response.Response
 // @Failure      403 {object} response.Response
 // @Router       /api/v1/admin/crop-rules [post]
 func (c *Controller) CreateRule(w http.ResponseWriter, r *http.Request) {
-	var req CreateRuleRequest
+	var req dto.CreateRuleRequest
 	if err := middleware.DecodeAndValidate(r, &req); err != nil {
 		middleware.WriteValidationError(w, err)
 		return
 	}
-	ru, err := c.svc.CreateRule(r.Context(), req)
+	ru, err := c.cropRuleSvc.CreateRule(r.Context(), req)
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, ru)
@@ -383,24 +484,14 @@ func (c *Controller) CreateRule(w http.ResponseWriter, r *http.Request) {
 // @Failure      404 {object} response.Response
 // @Router       /api/v1/admin/crop-rules/{id} [delete]
 func (c *Controller) DeleteRule(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIntParam(r, "id")
+	id, err := helpers.ParseIntParam(r, "id")
 	if err != nil {
-		writeErr(w, err)
+		helpers.WriteErr(w, err)
 		return
 	}
-	if err := c.svc.DeleteRule(r.Context(), id); err != nil {
-		writeErr(w, err)
+	if err = c.cropRuleSvc.DeleteRule(r.Context(), id); err != nil {
+		helpers.WriteErr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func atoiDefault(s string, def int) int {
-	if s == "" {
-		return def
-	}
-	if v, err := strconv.Atoi(s); err == nil {
-		return v
-	}
-	return def
 }

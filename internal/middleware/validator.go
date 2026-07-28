@@ -2,10 +2,13 @@ package middleware
 
 import (
 	"encoding/json"
+	"errors"
+	"garden-nook/internal/pkg/apperrors"
 	"net/http"
 	"strings"
 
 	"garden-nook/internal/pkg/response"
+
 	"github.com/go-playground/validator/v10"
 )
 
@@ -26,6 +29,10 @@ func DecodeAndValidate(r *http.Request, dst interface{}) error {
 	}
 
 	if err := validate.Struct(dst); err != nil {
+		var invalidValidationError *validator.InvalidValidationError
+		if errors.As(err, &invalidValidationError) {
+			return apperrors.ErrBadRequest
+		}
 		return &ValidationError{Message: formatValidationErrors(err)}
 	}
 	return nil
@@ -40,7 +47,8 @@ func (e *ValidationError) Error() string { return e.Message }
 // WriteValidationError отвечает клиенту 400 с описанием.
 func WriteValidationError(w http.ResponseWriter, err error) {
 	msg := "validation failed"
-	if ve, ok := err.(*ValidationError); ok {
+	var ve *ValidationError
+	if errors.As(err, &ve) {
 		msg = ve.Message
 	}
 	response.Error(w, http.StatusBadRequest, msg)

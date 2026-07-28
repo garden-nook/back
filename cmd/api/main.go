@@ -3,13 +3,19 @@ package main
 import (
 	"context"
 	"errors"
-	"garden-nook/docs"
+	docs "garden-nook/docs/gen"
 	"garden-nook/internal/config"
 	"garden-nook/internal/middleware"
 	"garden-nook/internal/migrator"
 	"garden-nook/internal/modules/auth"
 	"garden-nook/internal/modules/crops"
+	cropRepos "garden-nook/internal/modules/crops/repository"
+	cropSvcs "garden-nook/internal/modules/crops/service"
+	"garden-nook/internal/modules/plot"
+	plotRepos "garden-nook/internal/modules/plot/repository"
+	plotSvcs "garden-nook/internal/modules/plot/service"
 	"garden-nook/internal/pkg/database"
+	"garden-nook/internal/pkg/helpers"
 	"garden-nook/internal/pkg/jwt"
 	"log/slog"
 	"net/http"
@@ -21,12 +27,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	httpSwagger "github.com/swaggo/http-swagger"
-
-	_ "garden-nook/docs"
 )
 
 // @title           Garden Nook API
-// @version         0.0.3
+// @version         0.2.3
 // @host            localhost:8000
 // @BasePath        /
 // @securityDefinitions.apikey  UserAuth
@@ -57,15 +61,42 @@ func main() {
 	jwtMgr := jwt.NewManager(cfg.JWT.AccessSecret, cfg.JWT.UserAccessTTL, cfg.JWT.AdminAccessTTL)
 	authMW := middleware.NewAuth(jwtMgr)
 
+	errorMapper := database.NewErrorMapper(map[string]error{}, log)
+	seh := helpers.NewServiceErrorHandler(log)
+
 	// Модуль auth
 	authRepo := auth.NewRepository(pool)
 	authSvc := auth.NewService(authRepo, jwtMgr, log)
 	authCtrl := auth.NewController(authSvc)
 
-	// Инициализация модуля crops
-	cropsRepo := crops.NewRepository(pool)
-	cropsSvc := crops.NewService(cropsRepo, log)
-	cropsCtrl := crops.NewController(cropsSvc)
+	// Модуль crops
+	soilTypeRepo := cropRepos.NewSoilTypeRepo(pool, errorMapper)
+	cropFamilyRepo := cropRepos.NewCropFamilyRepo(pool, errorMapper)
+	cropRepo := cropRepos.NewCropRepo(pool, errorMapper)
+	cropRuleRepo := cropRepos.NewCropRuleRepo(pool, errorMapper)
+	ruleCache, err := cropSvcs.NewRuleCache(cropRuleRepo)
+	if err != nil {
+		log.Error("crop rule cache refresh failed", "err", err)
+		os.Exit(1)
+	}
+	soilTypeSvc := cropSvcs.NewSoilTypeService(soilTypeRepo, seh)
+	cropFamilySvc := cropSvcs.NewCropFamilyService(cropFamilyRepo, seh)
+	cropSvc := cropSvcs.NewCropService(cropRepo, cropFamilyRepo, cropRuleRepo, seh)
+	cropRuleSvc := cropSvcs.NewCropRuleService(cropRuleRepo, ruleCache, seh)
+	cropsCtrl := crops.NewController(soilTypeSvc, cropFamilySvc, cropSvc, cropRuleSvc)
+
+	// Модуль plots
+	plotRepo := plotRepos.NewPlotRepo(pool, errorMapper)
+	bedRepo := plotRepos.NewBedRepo(pool, errorMapper)
+	objectRepo := plotRepos.NewObjectRepo(pool, errorMapper)
+	gridRepo := plotRepos.NewGridCellRepo(pool, errorMapper)
+	eventRepo := plotRepos.NewEventStoreRepo(pool, errorMapper)
+	historyRepo := plotRepos.NewHistoryRepo(pool, errorMapper)
+	plotsSvc := plotSvcs.NewPlotService(pool, plotRepo, gridRepo, bedRepo, objectRepo, eventRepo, seh)
+	eventSvc := plotSvcs.NewEventService(pool, plotRepo, bedRepo, objectRepo, eventRepo, historyRepo, seh)
+	recommendationSvc := plotSvcs.NewRecommendationService(bedRepo, plotRepo, gridRepo, historyRepo, cropSvc, ruleCache, seh)
+	historySvc := plotSvcs.NewHistoryService(bedRepo, plotRepo, historyRepo, seh)
+	plotsCtrl := plots.NewController(plotsSvc, eventSvc, recommendationSvc, historySvc)
 
 	r := chi.NewRouter()
 
@@ -95,15 +126,15 @@ func main() {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// Swagger UI
 	docs.SwaggerInfo.Host = cfg.Docs.Host
 	docs.SwaggerInfo.Schemes = []string{cfg.Docs.Schema}
-
-	// Swagger UI
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Регистрация модулей
 	auth.RegisterRoutes(r, authCtrl, authMW)
 	crops.RegisterRoutes(r, cropsCtrl, authMW)
+	plots.RegisterRoutes(r, plotsCtrl, authMW)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Server.Port,
