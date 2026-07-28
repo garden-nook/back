@@ -107,9 +107,19 @@ func (r *PlotRepo) DeletePlot(ctx context.Context, plotID, ownerID string) error
 
 func (r *PlotRepo) GetPlotByOwnerAndID(ctx context.Context, plotID, ownerID string) (*model.Plot, error) {
 	query := `SELECT p.plot_id, p.name, p.soil_type, st.name AS soil_name,
-                     p.grid_cell_size, p.grid_cols, p.grid_rows
+                     p.grid_cell_size, p.grid_cols, p.grid_rows,
+					 COALESCE(b.bed_count, 0) AS bed_count,
+					 COALESCE(b. crop_count, 0) AS crop_count
               FROM plots p
               JOIN soil_types st ON st.id = p.soil_type
+              LEFT JOIN (
+                  SELECT plot_id,
+                         COUNT(*) AS bed_count,
+                         COUNT(current_crop_id) AS crop_count
+                  FROM beds_ui
+                  WHERE plot_id = $1
+                  GROUP BY plot_id
+              ) b ON b.plot_id = p.plot_id
               WHERE p.plot_id = $1 AND p.owner_id = $2`
 
 	row, err := r.db.Query(ctx, query, plotID, ownerID)
@@ -127,9 +137,19 @@ func (r *PlotRepo) GetPlotByOwnerAndID(ctx context.Context, plotID, ownerID stri
 
 func (r *PlotRepo) GetPlotByID(ctx context.Context, plotID string) (*model.Plot, error) {
 	query := `SELECT p.plot_id, p.name, p.soil_type, st.name AS soil_name,
-                     p.grid_cell_size, p.grid_cols, p.grid_rows
+                     p.grid_cell_size, p.grid_cols, p.grid_rows,
+					 COALESCE(b.bed_count, 0) AS bed_count,
+					 COALESCE(b. crop_count, 0) AS crop_count
               FROM plots p
               JOIN soil_types st ON st.id = p.soil_type
+              LEFT JOIN (
+                  SELECT plot_id,
+                         COUNT(*) AS bed_count,
+                         COUNT(current_crop_id) AS crop_count
+                  FROM beds_ui
+                  WHERE plot_id = $1
+                  GROUP BY plot_id
+              ) b ON b.plot_id = p.plot_id
               WHERE p.plot_id = $1`
 
 	row, err := r.db.Query(ctx, query, plotID)
