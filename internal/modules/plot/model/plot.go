@@ -10,6 +10,8 @@ type Plot struct {
 	GridCellSize float64 `json:"grid_cell_size" db:"grid_cell_size"`
 	GridCols     int     `json:"grid_cols" db:"grid_cols"`
 	GridRows     int     `json:"grid_rows" db:"grid_rows"`
+	BedCount     int     `json:"bed_count" db:"bed_count"`
+	CropCount    int     `json:"crop_count" db:"crop_count"`
 }
 
 type PlotStructure struct {

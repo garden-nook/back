@@ -27,9 +27,18 @@ func (r *PlotRepo) WithTx(tx pgx.Tx) *PlotRepo {
 
 func (r *PlotRepo) ListPlots(ctx context.Context, ownerID string, p *database.Pagination) ([]model.Plot, int, error) {
 	baseQuery := `SELECT p.plot_id, p.name, p.soil_type, st.name AS soil_name,
-	              p.grid_cell_size, p.grid_cols, p.grid_rows
+	              p.grid_cell_size, p.grid_cols, p.grid_rows,
+				  COALESCE(b.bed_count, 0) AS bed_count,
+				  COALESCE(b. crop_count, 0) AS crop_count
 	              FROM plots p
-	              JOIN soil_types st ON st.id = p.soil_type`
+	              JOIN soil_types st ON st.id = p.soil_type
+	              LEFT JOIN (
+                      SELECT plot_id,
+                             COUNT(*) AS bed_count,
+                             COUNT(current_crop_id) AS crop_count
+                      FROM beds_ui
+                      GROUP BY plot_id
+                  ) b ON b.plot_id = p.plot_id`
 	whereClause := "WHERE p.owner_id = $1"
 	whereArgs := []any{ownerID}
 	orderBy := "p.name"
