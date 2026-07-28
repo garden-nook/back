@@ -171,7 +171,7 @@ func (s *RecommendationService) GetBedRecommendations(
 					reasons = append(reasons, dto.ReasonDetail{
 						Explanation: rule.Explanation,
 						Score:       rule.ScoreModifier,
-						IsPositive:  rule.ScoreModifier > 0,
+						IsPositive:  rule.ScoreModifier >= 0,
 					})
 				}
 			}
@@ -181,14 +181,16 @@ func (s *RecommendationService) GetBedRecommendations(
 			return reasons[i].Score > reasons[j].Score
 		})
 
-		recommendations = append(recommendations, dto.CropRecommendation{
-			CropID:     crop.ID,
-			Name:       crop.Name,
-			FamilyName: crop.FamilyName,
-			Score:      score,
-			Reasons:    reasons,
-			IsPositive: score > 0,
-		})
+		if len(reasons) != 0 {
+			recommendations = append(recommendations, dto.CropRecommendation{
+				CropID:     crop.ID,
+				Name:       crop.Name,
+				FamilyName: crop.FamilyName,
+				Score:      score,
+				Reasons:    reasons,
+				IsPositive: score >= 0,
+			})
+		}
 	}
 
 	sort.Slice(recommendations, func(i, j int) bool {
